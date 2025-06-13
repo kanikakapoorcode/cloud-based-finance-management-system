@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Debug Page</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; }
+    .container { max-width: 800px; margin: 0 auto; }
+    .btn { display: inline-block; background: #1976d2; color: white; padding: 10px 15px; text-decoration: none; border-radius: 4px; margin: 10px 0; }
+    .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Finance Management System - Debug Page</h1>
+    <p>This page helps diagnose issues with the application.</p>
+    
+    <div class="test-section">
+      <h2>Test Application Links</h2>
+      <p>Click the links below to test different parts of the application:</p>
+      <a href="/" class="btn">Home Page</a>
+      <a href="/auth/login" class="btn">Login Page</a>
+      <a href="/auth/signup" class="btn">Signup Page</a>
+    </div>
+    
+    <div class="test-section">
+      <h2>Server Status</h2>
+      <p id="server-status">Checking server status...</p>
+    </div>
+  </div>
+  
+  <script>
+    console.log('Debug page loaded successfully');
+    
+    // Check if the server is responding
+    document.getElementById('server-status').textContent = 'Server is running at: ' + window.location.origin;
+  </script>
+</body>
+</html>
