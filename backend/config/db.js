@@ -6,9 +6,6 @@ if (process.env.NODE_ENV === 'development') {
   mongoose.set('debug', true);
 }
 
-// Remove the warning with Promise
-mongoose.Promise = global.Promise;
-
 // Exit application on error
 mongoose.connection.on('error', (err) => {
   console.error(`MongoDB connection error: ${err}`.red);
@@ -44,33 +41,37 @@ const connectDB = async () => {
     
     // When successfully connected
     mongoose.connection.on('connected', () => {
-      console.log('Mongoose default connection open to ' + process.env.MONGODB_URI);
+      console.log('Mongoose connected to MongoDB'.green);
     });
 
     // If the connection throws an error
     mongoose.connection.on('error', (err) => {
-      console.error('Mongoose default connection error: ' + err);
+      console.error('Mongoose connection error:'.red, err);
     });
 
     // When the connection is disconnected
     mongoose.connection.on('disconnected', () => {
-      console.log('Mongoose default connection disconnected');
-    });
-
-    // If the Node process ends, close the Mongoose connection
-    process.on('SIGINT', () => {
-      mongoose.connection.close(() => {
-        console.log('Mongoose default connection disconnected through app termination');
-        process.exit(0);
-      });
+      console.log('Mongoose connection disconnected'.yellow);
     });
 
     return conn;
   } catch (error) {
-    console.error(`Error: ${error.message}`.red);
+    console.error(`MongoDB connection error: ${error.message}`.red);
     // Exit process with failure
     process.exit(1);
   }
 };
+
+// Handle Node process termination
+process.on('SIGINT', async () => {
+  try {
+    await mongoose.connection.close();
+    console.log('Mongoose connection closed through app termination'.yellow);
+    process.exit(0);
+  } catch (err) {
+    console.error('Error closing MongoDB connection:'.red, err);
+    process.exit(1);
+  }
+});
 
 module.exports = connectDB;

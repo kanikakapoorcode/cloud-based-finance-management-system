@@ -127,19 +127,54 @@ const defaultCategories = [
  * @returns {Promise<Array>} Array of created categories
  */
 const createDefaultCategories = async (userId) => {
-  try {
-    // Add user ID to each default category
-    const categoriesWithUser = defaultCategories.map(category => ({
-      ...category,
-      user: userId
-    }));
+  console.log('Creating default categories for user:', userId);
+  
+  if (!userId) {
+    console.error('No user ID provided for creating default categories');
+    throw new Error('User ID is required');
+  }
 
+  try {
+    // Verify user exists
+    const User = require('../models/User');
+    const userExists = await User.findById(userId);
+    
+    if (!userExists) {
+      console.error('User not found with ID:', userId);
+      throw new Error('User not found');
+    }
+
+    // Add user ID to each default category
+    const categoriesWithUser = defaultCategories.map(category => {
+      console.log('Processing category:', category.name);
+      return {
+        ...category,
+        user: userId
+      };
+    });
+
+    console.log('Attempting to create categories in database...');
+    
     // Create categories in the database
     const createdCategories = await Category.create(categoriesWithUser);
+    
+    console.log('Successfully created', createdCategories.length, 'default categories');
     return createdCategories;
   } catch (error) {
-    console.error('Error creating default categories:', error);
-    throw new Error('Failed to create default categories');
+    console.error('Error in createDefaultCategories:', {
+      name: error.name,
+      message: error.message,
+      code: error.code,
+      keyValue: error.keyValue,
+      stack: error.stack
+    });
+    
+    // If it's a duplicate key error, log which category already exists
+    if (error.code === 11000) {
+      console.error('Duplicate category detected. Key conflict:', error.keyValue);
+    }
+    
+    throw new Error('Failed to create default categories: ' + error.message);
   }
 };
 

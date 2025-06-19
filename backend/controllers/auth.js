@@ -9,29 +9,54 @@ const { createDefaultCategories } = require('../utils/defaultCategories');
 // @route   POST /api/v1/auth/signup
 // @access  Public
 exports.register = asyncHandler(async (req, res, next) => {
+  console.log('Registration attempt with data:', req.body);
   const { name, email, password } = req.body;
 
-  // Check if user already exists
-  const existingUser = await User.findOne({ email });
-  if (existingUser) {
-    return next(new ErrorResponse('User already exists', 400));
+  // Input validation
+  if (!name || !email || !password) {
+    console.error('Missing required fields');
+    return next(new ErrorResponse('Please provide all required fields', 400));
   }
 
   try {
+    // Check if user already exists
+    console.log('Checking for existing user with email:', email);
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      console.error('User already exists:', email);
+      return next(new ErrorResponse('User already exists', 400));
+    }
+
     // Create user
+    console.log('Creating new user:', { name, email });
     const user = await User.create({
       name,
       email,
       password
     });
+    
+    console.log('User created successfully, creating default categories...');
 
-    // Create default categories for the new user
-    await createDefaultCategories(user._id);
+    try {
+      // Try to create default categories
+      await createDefaultCategories(user._id);
+      console.log('Default categories created successfully');
+    } catch (categoryError) {
+      console.error('Warning: Could not create default categories:', categoryError);
+      // Continue with registration even if categories fail
+    }
 
+    console.log('Sending success response for user:', user.email);
     sendTokenResponse(user, 201, res);
   } catch (err) {
-    console.error('Error creating user:', err);
-    return next(new ErrorResponse('Error creating user', 500));
+    console.error('Error in user registration:', {
+      name: err.name,
+      message: err.message,
+      stack: err.stack,
+      code: err.code,
+      keyValue: err.keyValue
+    });
+    return next(new ErrorResponse('Registration failed: ' + err.message, 500));
   }
 });
 
