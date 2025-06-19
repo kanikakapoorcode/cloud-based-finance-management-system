@@ -12,6 +12,7 @@ import { AuthProvider } from './contexts/AuthContext';
 // Import pages
 import Homepage from './pages/Homepage';
 import DashboardPage from './pages/DashboardPage';
+import DashboardHome from './pages/DashboardHome';
 import TransactionsPage from './pages/TransactionsPage';
 import ReportsPage from './pages/ReportsPage';
 import BudgetOverview from './components/Budget/BudgetOverview';
@@ -41,7 +42,7 @@ function App() {
                 </PrivateRoute>
               } 
             >
-              <Route index element={<Navigate to="transactions" replace />} />
+              <Route index element={<DashboardHome />} />
               <Route path="transactions/*" element={<TransactionsPage />} />
               <Route path="reports/*" element={<ReportsPage />} />
               <Route path="budget">
