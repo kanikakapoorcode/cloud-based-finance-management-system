@@ -81,12 +81,13 @@ export default function Header() {
               
               <IconButton
                 size="large"
-                aria-label="account of current user"
-                aria-controls="menu-appbar"
+                aria-label={`Account of ${user?.name || 'user'}`}
+                aria-controls="user-account-menu"
                 aria-haspopup="true"
                 onClick={handleMenu}
                 color="inherit"
                 sx={{ p: 0, ml: 1 }}
+                id="user-account-button"
               >
                 {user.avatar ? (
                   <Avatar 
@@ -109,7 +110,8 @@ export default function Header() {
               </IconButton>
               
               <Menu
-                id="menu-appbar"
+                id="user-account-menu"
+                aria-labelledby="user-account-button"
                 anchorEl={anchorEl}
                 anchorOrigin={{
                   vertical: 'bottom',
@@ -150,11 +152,13 @@ export default function Header() {
                 }}
               >
                 <MenuItem onClick={handleProfile}>
-                  <Avatar /> Profile
+                  <Avatar aria-hidden="true" /> 
+                  <span>Profile</span>
                 </MenuItem>
                 <Divider />
                 <MenuItem onClick={handleLogout}>
-                  <Avatar /> Logout
+                  <Avatar aria-hidden="true" /> 
+                  <span>Logout</span>
                 </MenuItem>
               </Menu>
             </Box>
