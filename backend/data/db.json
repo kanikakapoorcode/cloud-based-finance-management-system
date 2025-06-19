@@ -1,0 +1,67 @@
+{
+  "transactions": [],
+  "users": [
+    {
+      "name": "Kanika kapoor",
+      "email": "sheetalkapoor009@gmail.com",
+      "password": "$2a$10$VXcj2NhQJ8Mut7XVRxGqq.cr43TabX/tPIX9244.bOCjj6C7s9dwK",
+      "role": "user",
+      "_id": "268603ba-ad34-4344-ab06-c9d35c3cfc58",
+      "isActive": true,
+      "createdAt": "2025-06-19T12:24:21.469Z",
+      "updatedAt": "2025-06-19T12:24:21.470Z"
+    },
+    {
+      "name": "Kanika Kapoor",
+      "email": "kanikakr823@gmail.com",
+      "password": "$2a$10$ul4khhDVLwjMY3WoAGZqV.xcfrxzH06Y3qXJ.ECEZKfcYgfh4g20W",
+      "role": "user",
+      "_id": "5b1b87fe-5359-403d-a782-adfea3c2dcbd",
+      "isActive": true,
+      "createdAt": "2025-06-19T18:22:07.430Z",
+      "updatedAt": "2025-06-19T18:22:07.431Z"
+    }
+  ],
+  "categories": [
+    {
+      "_id": "1",
+      "name": "Food",
+      "type": "expense",
+      "color": "#FF6B6B",
+      "icon": "utensils",
+      "isDefault": true
+    },
+    {
+      "_id": "2",
+      "name": "Transportation",
+      "type": "expense",
+      "color": "#4ECDC4",
+      "icon": "bus",
+      "isDefault": true
+    },
+    {
+      "_id": "3",
+      "name": "Shopping",
+      "type": "expense",
+      "color": "#FFD166",
+      "icon": "shopping-bag",
+      "isDefault": true
+    },
+    {
+      "_id": "4",
+      "name": "Salary",
+      "type": "income",
+      "color": "#06D6A0",
+      "icon": "money-bill-wave",
+      "isDefault": true
+    },
+    {
+      "_id": "5",
+      "name": "Freelance",
+      "type": "income",
+      "color": "#118AB2",
+      "icon": "laptop-code",
+      "isDefault": true
+    }
+  ]
+}

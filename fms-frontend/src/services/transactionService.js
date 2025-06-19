@@ -3,16 +3,20 @@ import { transactionAPI } from './api';
 
 /**
  * Fetches all transactions for the logged-in user.
- * The user ID is retrieved from localStorage by the API interceptor.
+ * The user ID is retrieved from the auth token by the API interceptor.
  */
 export const getTransactions = async () => {
   try {
+    console.log('Fetching transactions...');
     const response = await transactionAPI.getAll();
-    return response.data; // The interceptor ensures this is the success data
+    console.log('Transactions fetched successfully:', response.data);
+    return response.data;
   } catch (error) {
-    // The interceptor in api.js already handles toast notifications for errors.
-    // We just need to re-throw the error so the calling component knows about it.
-    console.error('Error fetching transactions:', error);
+    console.error('Error in getTransactions:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+    });
     throw error;
   }
 };
@@ -23,10 +27,17 @@ export const getTransactions = async () => {
  */
 export const addTransaction = async (transactionData) => {
   try {
+    console.log('Adding transaction with data:', transactionData);
     const response = await transactionAPI.add(transactionData);
+    console.log('Transaction added successfully:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Error adding transaction:', error);
+    console.error('Error in addTransaction:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+      requestData: transactionData
+    });
     throw error;
   }
 };
@@ -37,10 +48,17 @@ export const addTransaction = async (transactionData) => {
  */
 export const deleteTransaction = async (id) => {
   try {
+    console.log(`Deleting transaction with ID: ${id}`);
     const response = await transactionAPI.delete(id);
+    console.log('Transaction deleted successfully:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Error deleting transaction:', error);
+    console.error('Error in deleteTransaction:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+      transactionId: id
+    });
     throw error;
   }
 };
@@ -48,5 +66,5 @@ export const deleteTransaction = async (id) => {
 export default {
   getTransactions,
   addTransaction,
-  deleteTransaction
+  deleteTransaction,
 };

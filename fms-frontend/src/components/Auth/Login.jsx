@@ -16,21 +16,22 @@ import {
   IconButton
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth } from '../../contexts/AuthContext';
 
 const LoginSchema = Yup.object().shape({
   email: Yup.string()
     .email('Invalid email')
-    .required('Required'),
+    .required('Email is required'),
   password: Yup.string()
-    .min(8, 'Password too short')
-    .required('Required')
+    .min(8, 'Password must be at least 8 characters')
+    .required('Password is required')
 });
 
 export default function Login() {
   const navigate = useNavigate();
   const { login, loading, error } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const formik = useFormik({
     initialValues: {
@@ -38,10 +39,22 @@ export default function Login() {
       password: ''
     },
     validationSchema: LoginSchema,
-    onSubmit: async (values) => {
-      const result = await login(values.email, values.password);
-      if (result.success) {
-        navigate('/dashboard');
+    onSubmit: async (values, { setSubmitting }) => {
+      try {
+        setSubmitError('');
+        const result = await login(values.email, values.password);
+        
+        if (result.success) {
+          // Navigation handled in AuthContext after successful login
+          return;
+        } else {
+          setSubmitError(result.error || 'Login failed. Please try again.');
+        }
+      } catch (error) {
+        console.error('Login error:', error);
+        setSubmitError('An unexpected error occurred. Please try again.');
+      } finally {
+        setSubmitting(false);
       }
     }
   });
@@ -60,18 +73,14 @@ export default function Login() {
           Sign in
         </Typography>
         
-        {error && (
-          <Alert severity="error" sx={{ width: '100%', mt: 2 }}>
-            {error}
+        {/* Display any errors */}
+        {(error || submitError) && (
+          <Alert severity="error" sx={{ width: '100%', mt: 2, mb: 2 }}>
+            {error || submitError}
           </Alert>
         )}
 
-        <Box 
-          component="form" 
-          onSubmit={formik.handleSubmit} 
-          noValidate 
-          sx={{ mt: 1, width: '100%' }}
-        >
+        <Box component="form" onSubmit={formik.handleSubmit} sx={{ mt: 1, width: '100%' }}>
           <TextField
             margin="normal"
             required
@@ -83,8 +92,10 @@ export default function Login() {
             autoFocus
             value={formik.values.email}
             onChange={formik.handleChange}
+            onBlur={formik.handleBlur}
             error={formik.touched.email && Boolean(formik.errors.email)}
             helperText={formik.touched.email && formik.errors.email}
+            disabled={loading}
           />
           
           <TextField
@@ -98,8 +109,10 @@ export default function Login() {
             autoComplete="current-password"
             value={formik.values.password}
             onChange={formik.handleChange}
+            onBlur={formik.handleBlur}
             error={formik.touched.password && Boolean(formik.errors.password)}
             helperText={formik.touched.password && formik.errors.password}
+            disabled={loading}
             InputProps={{
               endAdornment: (
                 <InputAdornment position="end">
@@ -111,30 +124,22 @@ export default function Login() {
                     {showPassword ? <VisibilityOff /> : <Visibility />}
                   </IconButton>
                 </InputAdornment>
-              )
+              ),
             }}
           />
 
+          
           <Button
             type="submit"
             fullWidth
             variant="contained"
-            disabled={loading}
-            sx={{ mt: 3, mb: 2, py: 1.5 }}
+            sx={{ mt: 3, mb: 2 }}
+            disabled={loading || !formik.isValid || formik.isSubmitting}
           >
-            {loading ? (
-              <CircularProgress size={24} color="inherit" />
-            ) : (
-              'Sign In'
-            )}
+            {loading ? <CircularProgress size={24} /> : 'Sign In'}
           </Button>
           
-          <Grid container>
-            <Grid item xs>
-              <MuiLink component={Link} to="/auth/forgot-password" variant="body2">
-                Forgot password?
-              </MuiLink>
-            </Grid>
+          <Grid container justifyContent="flex-end">
             <Grid item>
               <MuiLink component={Link} to="/auth/signup" variant="body2">
                 Don't have an account? Sign Up

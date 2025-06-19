@@ -119,4 +119,152 @@ class ErrorResponse extends Error {
   }
 }
 
+/**
+ * Create a 404 Not Found error
+ * @param {string} [message='Resource not found'] - Error message
+ * @param {string} [code='NOT_FOUND'] - Error code
+ * @param {Object} [metadata] - Additional metadata
+ * @returns {ErrorResponse}
+ */
+ErrorResponse.notFound = function(
+  message = 'Resource not found',
+  code = 'NOT_FOUND',
+  metadata = {}
+) {
+  return new ErrorResponse(
+    message,
+    404,
+    null,
+    code,
+    { ...metadata, errorType: 'not_found' },
+    true
+  );
+};
+
+/**
+ * Create a 409 Conflict error
+ * @param {string} [message='Conflict'] - Error message
+ * @param {string} [code='CONFLICT'] - Error code
+ * @param {Object} [errors] - Error details
+ * @param {Object} [metadata] - Additional metadata
+ * @returns {ErrorResponse}
+ */
+ErrorResponse.conflict = function(
+  message = 'Conflict',
+  code = 'CONFLICT',
+  errors = null,
+  metadata = {}
+) {
+  return new ErrorResponse(
+    message,
+    409,
+    errors,
+    code,
+    { ...metadata, errorType: 'conflict' },
+    true
+  );
+};
+
+/**
+ * Create a 422 Unprocessable Entity error
+ * @param {string} [message='Unprocessable Entity'] - Error message
+ * @param {Object} [errors] - Validation errors
+ * @param {string} [code='VALIDATION_ERROR'] - Error code
+ * @param {Object} [metadata] - Additional metadata
+ * @returns {ErrorResponse}
+ */
+ErrorResponse.validationError = function(
+  message = 'Validation failed',
+  errors = {},
+  code = 'VALIDATION_ERROR',
+  metadata = {}
+) {
+  return new ErrorResponse(
+    message,
+    422,
+    errors,
+    code,
+    { ...metadata, errorType: 'validation' },
+    true
+  );
+};
+
+/**
+ * Create a 429 Too Many Requests error
+ * @param {string} [message='Too many requests, please try again later'] - Error message
+ * @param {string} [code='RATE_LIMIT_EXCEEDED'] - Error code
+ * @param {Object} [metadata] - Additional metadata including retryAfter
+ * @returns {ErrorResponse}
+ */
+ErrorResponse.tooManyRequests = function(
+  message = 'Too many requests, please try again later',
+  code = 'RATE_LIMIT_EXCEEDED',
+  metadata = {}
+) {
+  return new ErrorResponse(
+    message,
+    429,
+    null,
+    code,
+    { ...metadata, errorType: 'rate_limit' },
+    true
+  );
+};
+
+/**
+ * Create a 500 Internal Server Error
+ * @param {string} [message='Internal Server Error'] - Error message
+ * @param {string} [code='INTERNAL_SERVER_ERROR'] - Error code
+ * @param {Error} [error] - Original error object
+ * @param {Object} [metadata] - Additional metadata
+ * @returns {ErrorResponse}
+ */
+ErrorResponse.internal = function(
+  message = 'Internal Server Error',
+  code = 'INTERNAL_SERVER_ERROR',
+  error = null,
+  metadata = {}
+) {
+  // Log the original error if provided
+  if (error && error instanceof Error) {
+    logger.error('Internal Server Error', {
+      message: error.message,
+      stack: error.stack,
+      ...metadata
+    });
+  }
+
+  return new ErrorResponse(
+    message,
+    500,
+    error ? { error: error.message } : null,
+    code,
+    { ...metadata, errorType: 'server' },
+    false // Not an operational error
+  );
+};
+
+/**
+ * Create a 503 Service Unavailable error
+ * @param {string} [message='Service Unavailable'] - Error message
+ * @param {string} [code='SERVICE_UNAVAILABLE'] - Error code
+ * @param {Object} [metadata] - Additional metadata including retryAfter
+ * @returns {ErrorResponse}
+ */
+ErrorResponse.serviceUnavailable = function(
+  message = 'Service Unavailable',
+  code = 'SERVICE_UNAVAILABLE',
+  metadata = {}
+) {
+  return new ErrorResponse(
+    message,
+    503,
+    null,
+    code,
+    { ...metadata, errorType: 'unavailable' },
+    true
+  );
+};
+
+// Export the ErrorResponse class
 module.exports = ErrorResponse;

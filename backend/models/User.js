@@ -17,6 +17,11 @@ const userSchema = new mongoose.Schema({
       'Please add a valid email'
     ]
   },
+  role: {
+    type: String,
+    enum: ['user', 'admin'],
+    default: 'user'
+  },
   password: {
     type: String,
     required: [true, 'Please add a password'],
@@ -25,10 +30,23 @@ const userSchema = new mongoose.Schema({
   },
   resetPasswordToken: String,
   resetPasswordExpire: Date,
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  phone: String,
+  avatar: String,
   createdAt: {
     type: Date,
     default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
   }
+}, {
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
 });
 
 // Encrypt password using bcrypt
@@ -94,6 +112,56 @@ userSchema.methods.matchPassword = async function(enteredPassword) {
     });
     throw error;
   }
+};
+
+// Check if email is taken
+userSchema.statics.isEmailTaken = async function(email) {
+  const user = await this.findOne({ email });
+  return !!user;
+};
+
+// Static method to get user by ID
+userSchema.statics.findById = async function(id) {
+  return this.findOne({ _id: id });
+};
+
+// Static method to find user by ID and update
+userSchema.statics.findByIdAndUpdate = async function(id, update, options = {}) {
+  return this.findOneAndUpdate(
+    { _id: id },
+    { ...update, updatedAt: Date.now() },
+    { new: true, runValidators: true, ...options }
+  );
+};
+
+// Static method to find user by ID and delete
+userSchema.statics.findByIdAndDelete = async function(id) {
+  return this.findOneAndDelete({ _id: id });
+};
+
+// Static method to get all users with pagination
+userSchema.statics.find = async function(query = {}, options = {}) {
+  const { select, sort, skip, limit } = options;
+  
+  let queryBuilder = this.find(query);
+  
+  if (select) {
+    queryBuilder = queryBuilder.select(select);
+  }
+  
+  if (sort) {
+    queryBuilder = queryBuilder.sort(sort);
+  }
+  
+  if (skip) {
+    queryBuilder = queryBuilder.skip(skip);
+  }
+  
+  if (limit) {
+    queryBuilder = queryBuilder.limit(limit);
+  }
+  
+  return queryBuilder;
 };
 
 // Check if email is taken

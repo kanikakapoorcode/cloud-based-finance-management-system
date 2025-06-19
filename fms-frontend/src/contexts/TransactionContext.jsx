@@ -13,17 +13,31 @@ export const TransactionProvider = ({ children }) => {
   const { user } = useAuth();
 
   const fetchTransactions = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setError('User not authenticated');
+      return;
+    }
     try {
       setLoading(true);
+      setError(null);
+      console.log('Fetching transactions...');
       const response = await getTransactions();
-      if (response.success) {
-        setTransactions(response.data);
+      console.log('Transactions response:', response);
+      if (response && response.success) {
+        setTransactions(response.data || []);
       } else {
-        setError(response.error || 'Failed to fetch transactions');
+        const errorMessage = response?.error || 'Failed to fetch transactions';
+        console.error('Error fetching transactions:', errorMessage);
+        setError(errorMessage);
       }
     } catch (err) {
-      setError(err.message || 'An error occurred while fetching transactions.');
+      const errorMessage = err.response?.data?.message || err.message || 'An error occurred while fetching transactions.';
+      console.error('Error in fetchTransactions:', {
+        error: err,
+        message: errorMessage,
+        response: err.response?.data
+      });
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

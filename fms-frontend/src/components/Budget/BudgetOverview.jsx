@@ -129,11 +129,30 @@ export default function BudgetOverview() {
             size="small"
             sx={{ width: 120 }}
           >
-            {months.map((month) => (
-              <MenuItem key={month} value={month}>
-                {new Date(`${month}-01`).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
-              </MenuItem>
-            ))}
+            {months.map((month) => {
+              try {
+                const [monthNum, year] = month.split('-').map(Number);
+                const date = new Date(year, monthNum - 1, 1);
+                const formattedDate = date.toLocaleDateString('en-US', { 
+                  month: 'short', 
+                  year: 'numeric',
+                  timeZone: 'Asia/Kolkata'
+                });
+                
+                return (
+                  <MenuItem key={month} value={month}>
+                    {formattedDate}
+                  </MenuItem>
+                );
+              } catch (error) {
+                console.error('Error formatting date:', error);
+                return (
+                  <MenuItem key={month} value={month}>
+                    {month}
+                  </MenuItem>
+                );
+              }
+            })}
           </TextField>
           <Button 
             variant="outlined" 
@@ -195,7 +214,11 @@ export default function BudgetOverview() {
               </Typography>
               <Box sx={{ mt: 1 }}>
                 <Typography variant="body2" color="text.secondary">
-                  {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  {new Date().toLocaleDateString('en-US', { 
+                    month: 'long', 
+                    year: 'numeric',
+                    timeZone: 'Asia/Kolkata'
+                  })}
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                   Daily budget remaining: ₹{(budgetData.remainingBudget / 10).toFixed(2)}

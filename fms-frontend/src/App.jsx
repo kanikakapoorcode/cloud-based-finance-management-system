@@ -12,7 +12,12 @@ import { AuthProvider } from './contexts/AuthContext';
 // Import pages
 import Homepage from './pages/Homepage';
 import DashboardPage from './pages/DashboardPage';
+import TransactionsPage from './pages/TransactionsPage';
+import ReportsPage from './pages/ReportsPage';
+import BudgetOverview from './components/Budget/BudgetOverview';
+import BudgetSetup from './components/Budget/BudgetSetup';
 import AuthPage from './pages/AuthPage';
+import ProfilePage from './pages/ProfilePage';
 import PrivateRoute from './components/Auth/PrivateRoute';
 
 function App() {
@@ -33,6 +38,24 @@ function App() {
               element={
                 <PrivateRoute>
                   <DashboardPage />
+                </PrivateRoute>
+              } 
+            >
+              <Route index element={<Navigate to="transactions" replace />} />
+              <Route path="transactions/*" element={<TransactionsPage />} />
+              <Route path="reports/*" element={<ReportsPage />} />
+              <Route path="budget">
+                <Route index element={<Navigate to="overview" replace />} />
+                <Route path="overview" element={<BudgetOverview />} />
+                <Route path="setup" element={<BudgetSetup />} />
+              </Route>
+              <Route path="*" element={<Navigate to="transactions" replace />} />
+            </Route>
+            <Route 
+              path="/profile" 
+              element={
+                <PrivateRoute>
+                  <ProfilePage />
                 </PrivateRoute>
               } 
             />

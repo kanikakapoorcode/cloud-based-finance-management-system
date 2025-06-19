@@ -1,5 +1,9 @@
 require('colors');
 require('dotenv').config();
+const logger = require('./utils/logger');
+
+// Environment variables
+const NODE_ENV = process.env.NODE_ENV || 'development';
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
@@ -8,23 +12,22 @@ const helmet = require('helmet');
 const mongoSanitize = require('@exortek/express-mongo-sanitize');
 const { xss } = require('express-xss-sanitizer');
 const hpp = require('hpp');
+const { errors } = require('celebrate');
 const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
 
 // Initialize express app
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001; // Changed default port to 5001
 
-// Import database connection
-const connectDB = require('./config/db');
-
-// Connect to database
-connectDB();
+// Initialize in-memory database
+console.log('Using in-memory database for development');
 
 // Import routes
 const authRoutes = require('./routes/auth');
 const categoryRoutes = require('./routes/categories');
 const transactionRoutes = require('./routes/transactions');
+const userRoutes = require('./routes/users');
 
 // Enable CORS
 const allowedOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173'];
@@ -47,7 +50,71 @@ app.use(cors({
 app.options('*', cors());
 
 // Set security HTTP headers
-app.use(helmet());
+const helmetConfig = {
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "'unsafe-eval'",
+        process.env.NODE_ENV === 'development' ? 'http://localhost:*' : ''
+      ].filter(Boolean),
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      imgSrc: ["'self'", 'data:', 'https:'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      connectSrc: [
+        "'self'",
+        process.env.API_URL || 'http://localhost:5000',
+        'https://*.tiles.mapbox.com',
+        'https://api.mapbox.com',
+        'https://events.mapbox.com'
+      ],
+      frameSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      upgradeInsecureRequests: [],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Required for Mapbox
+  crossOriginOpenerPolicy: false, // Required for Mapbox
+  crossOriginResourcePolicy: { policy: 'cross-origin' }, // Required for Mapbox
+  referrerPolicy: { policy: 'no-referrer' },
+  xssFilter: true,
+  noSniff: true,
+  frameguard: {
+    action: 'deny',
+  },
+  hsts: {
+    maxAge: 31536000, // 1 year
+    includeSubDomains: true,
+    preload: true,
+  },
+  hidePoweredBy: true,
+};
+
+app.use(helmet(helmetConfig));
+
+// Add security headers
+app.use((req, res, next) => {
+  // Prevent clickjacking
+  res.setHeader('X-Frame-Options', 'DENY');
+  
+  // Enable XSS protection
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  
+  // Prevent MIME type sniffing
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  
+  // Disable caching for sensitive routes
+  if (req.path.startsWith('/api/')) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
+  }
+  
+  next();
+});
 
 // Rate limiting
 const limiter = rateLimit({
@@ -80,60 +147,92 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-// Mount routers
+// Mount routes
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/categories', categoryRoutes);
 app.use('/api/v1/transactions', transactionRoutes);
-
-// Simple health check endpoint
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    message: 'Server is healthy',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
-  });
-});
+app.use('/api/v1/users', userRoutes);
 
 // Serve static assets in production
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../fms-frontend/dist')));
-  
+  // Set static folder
+  app.use(express.static(path.join(__dirname, '../client/build')));
+
   app.get('*', (req, res) => {
-    res.sendFile(path.resolve(__dirname, '../fms-frontend/dist', 'index.html'));
+    res.sendFile(path.resolve(__dirname, '../client/build', 'index.html'));
   });
 }
 
-// Error handling middleware (should be after all other middleware and routes)
+// Handle 404 - Not Found
+app.all('*', (req, res, next) => {
+  const err = new Error(`Can't find ${req.originalUrl} on this server!`);
+  err.statusCode = 404;
+  err.status = 'fail';
+  next(err);
+});
+
+// Global error handling middleware
 const errorHandler = require('./middleware/error');
+
+// Celebrate validation errors
+app.use(errors());
 app.use(errorHandler);
 
-const server = app.listen(PORT, () => {
-  console.log(`\n${'='.repeat(50)}`.green);
-  console.log(`🚀 Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`.yellow.bold);
-  console.log(`🌐 Access the server at: http://localhost:${PORT}`.cyan.underline);
-  console.log(`${'='.repeat(50)}\n`.green);
+// Start server
+const server = app.listen(PORT, '0.0.0.0', () => {
+  const address = server.address();
+  const host = address.address === '::' ? 'localhost' : address.address;
+  const port = address.port;
+  
+  logger.info(`\n${'='.repeat(70)}`);
+  logger.info(`🚀 Server running in ${NODE_ENV} mode`.green.bold);
+  logger.info(`🌐 Access the server at: http://${host}:${port}`.cyan.underline);
+  logger.info(`📊 API Documentation: http://${host}:${port}/api-docs`.cyan.underline);
+  logger.info(`📈 Health Check: http://${host}:${port}/api/v1/health`.cyan.underline);
+  logger.info(`${'='.repeat(70)}\n`);
 });
 
 // Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-  console.error('UNHANDLED REJECTION! 💥 Shutting down...'.red.bold);
-  console.error('Error:'.red, err?.name, err?.message);
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection at:', { promise, reason });
   
-  server.close(() => {
-    process.exit(1);
-  });
+  // In production, you might want to gracefully shut down
+  if (NODE_ENV === 'production') {
+    server.close(() => {
+      logger.error('Server closed due to unhandled rejection');
+      process.exit(1);
+    });
+  }
 });
 
 // Handle uncaught exceptions
-process.on('uncaughtException', (err) => {
-  console.error('UNCAUGHT EXCEPTION! 💥 Shutting down...'.red.bold);
-  console.error('Error:'.red, err?.name, err?.message);
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', error);
   
+  // In production, you might want to gracefully shut down
+  if (NODE_ENV === 'production') {
+    server.close(() => {
+      logger.error('Server closed due to uncaught exception');
+      process.exit(1);
+    });
+  }
+});
+
+// Handle SIGTERM for graceful shutdown
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received. Shutting down gracefully');
   server.close(() => {
-    process.exit(1);
+    logger.info('Process terminated');
   });
 });
+
+// Handle process exit
+process.on('exit', (code) => {
+  logger.info(`Process exiting with code ${code}`);
+});
+
+// Export the Express app for testing
+module.exports = { app, server };
 
 // Handle SIGTERM (for production)
 process.on('SIGTERM', () => {
