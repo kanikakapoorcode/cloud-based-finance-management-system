@@ -19,29 +19,49 @@ import { Add, Remove, Save, Cancel, ArrowBack } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import { Link, useNavigate } from 'react-router-dom';
 import { formatCurrency } from '../../utils/formatCurrency';
+import { useBudget } from '../../contexts/BudgetContext';
+
+const defaultBudgetData = {
+  monthlyIncome: 3500,
+  savingsGoal: 500,
+  categories: [
+    { id: 1, name: 'Housing', amount: 1200 },
+    { id: 2, name: 'Groceries', amount: 400 },
+    { id: 3, name: 'Utilities', amount: 300 },
+    { id: 4, name: 'Transportation', amount: 200 },
+    { id: 5, name: 'Entertainment', amount: 150 },
+    { id: 6, name: 'Healthcare', amount: 250 },
+    { id: 7, name: 'Personal', amount: 200 },
+    { id: 8, name: 'Other', amount: 300 }
+  ]
+};
 
 export default function BudgetSetup() {
-  const [budgetData, setBudgetData] = useState({
-    monthlyIncome: 3500,
-    savingsGoal: 500,
-    categories: [
-      { id: 1, name: 'Housing', amount: 1200 },
-      { id: 2, name: 'Groceries', amount: 400 },
-      { id: 3, name: 'Utilities', amount: 300 },
-      { id: 4, name: 'Transportation', amount: 200 },
-      { id: 5, name: 'Entertainment', amount: 150 },
-      { id: 6, name: 'Healthcare', amount: 250 },
-      { id: 7, name: 'Personal', amount: 200 },
-      { id: 8, name: 'Other', amount: 300 }
-    ]
-  });
+  const { budgetData: contextBudgetData, updateBudget, loading: contextLoading } = useBudget();
+  const [budgetData, setBudgetData] = useState(defaultBudgetData);
   const [newCategory, setNewCategory] = useState('');
   const [newAmount, setNewAmount] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [totalAllocated, setTotalAllocated] = useState(0);
   const [remaining, setRemaining] = useState(0);
   const { enqueueSnackbar } = useSnackbar();
   const navigate = useNavigate();
+  
+  // Initialize with context data if available
+  useEffect(() => {
+    if (contextBudgetData) {
+      setBudgetData(contextBudgetData);
+    }
+  }, [contextBudgetData]);
+
+  // Show loading state while context is loading
+  if (contextLoading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="50vh">
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   useEffect(() => {
     // Calculate totals whenever budgetData changes
@@ -96,14 +116,21 @@ export default function BudgetSetup() {
     });
   };
 
-  const handleSubmit = () => {
-    setLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      enqueueSnackbar('Budget saved successfully!', { variant: 'success' });
-      setLoading(false);
-      navigate('/dashboard/budget');
-    }, 1000);
+  const handleSubmit = async (e) => {
+    e?.preventDefault();
+    setSubmitting(true);
+    try {
+      const success = await updateBudget(budgetData);
+      if (success) {
+        enqueueSnackbar('Budget saved successfully!', { variant: 'success' });
+        navigate('/dashboard/budget/overview');
+      }
+    } catch (error) {
+      console.error('Error saving budget:', error);
+      enqueueSnackbar('Failed to save budget. Please try again.', { variant: 'error' });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -300,9 +327,9 @@ export default function BudgetSetup() {
               variant="contained"
               startIcon={<Save />}
               onClick={handleSubmit}
-              disabled={loading || remaining < 0}
+              disabled={submitting || remaining < 0}
             >
-              {loading ? <CircularProgress size={24} /> : 'Save Budget'}
+              {submitting ? <CircularProgress size={24} /> : 'Save Budget'}
             </Button>
           </Box>
         </Grid>

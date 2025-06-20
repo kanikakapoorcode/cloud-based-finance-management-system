@@ -1,5 +1,6 @@
 // src/components/Budget/BudgetOverview.jsx
 import { useState, useEffect } from 'react';
+import { useBudget } from '../../contexts/BudgetContext';
 import { 
   Box, 
   Paper, 
@@ -53,52 +54,44 @@ const BudgetChart = ({ data }) => {
   );
 };
 
+// Mock spending data - in a real app, this would come from your transactions
+const mockSpending = {
+  'Housing': 1200,
+  'Groceries': 310.50,
+  'Utilities': 165.75,
+  'Transportation': 75,
+  'Entertainment': 100,
+  'Healthcare': 0,
+  'Personal': 0,
+  'Other': 0
+};
+
 export default function BudgetOverview() {
-  const [budgetData, setBudgetData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [selectedMonth, setSelectedMonth] = useState('05-2025'); // May 2025
+  const { budgetData, loading: contextLoading } = useBudget();
+  const [selectedMonth, setSelectedMonth] = useState('05-2025');
   const { enqueueSnackbar } = useSnackbar();
 
   const months = [
     '04-2025', '05-2025', '06-2025'
   ];
 
-  useEffect(() => {
-    // Mock data - replace with actual API call
-    const fetchBudgetData = async () => {
-      try {
-        // Simulate API call
-        setTimeout(() => {
-          const mockData = {
-            totalBudget: 3000,
-            totalSpent: 1850.75,
-            remainingBudget: 1149.25,
-            savingsGoal: 500,
-            currentSavings: 425,
-            categories: [
-              { category: 'Housing', budget: 1200, spent: 1200 },
-              { category: 'Groceries', budget: 400, spent: 310.50 },
-              { category: 'Utilities', budget: 300, spent: 165.75 },
-              { category: 'Transportation', budget: 200, spent: 75 },
-              { category: 'Entertainment', budget: 150, spent: 100 },
-              { category: 'Healthcare', budget: 250, spent: 0 },
-              { category: 'Personal', budget: 200, spent: 0 },
-              { category: 'Other', budget: 300, spent: 0 }
-            ]
-          };
-          setBudgetData(mockData);
-          setLoading(false);
-        }, 500);
-      } catch (error) {
-        console.error('Error fetching budget data:', error);
-        enqueueSnackbar('Failed to load budget data', { variant: 'error' });
-        setLoading(false);
-      }
-    };
+  // Format budget data for display
+  const formattedData = budgetData ? {
+    totalBudget: budgetData.monthlyIncome,
+    totalSpent: budgetData.categories.reduce((sum, cat) => sum + (mockSpending[cat.name] || 0), 0),
+    remainingBudget: budgetData.monthlyIncome - budgetData.savingsGoal - 
+                    budgetData.categories.reduce((sum, cat) => sum + (mockSpending[cat.name] || 0), 0),
+    savingsGoal: budgetData.savingsGoal,
+    currentSavings: budgetData.savingsGoal * 0.85, // Mocked savings progress
+    categories: budgetData.categories.map(cat => ({
+      category: cat.name,
+      budget: cat.amount,
+      spent: mockSpending[cat.name] || 0
+    }))
+  } : null;
 
-    setLoading(true);
-    fetchBudgetData();
-  }, [selectedMonth, enqueueSnackbar]);
+  // If we have no budget data but context is done loading, show the setup message
+  const loading = contextLoading && !budgetData;
 
   const handleMonthChange = (event) => {
     setSelectedMonth(event.target.value);
@@ -106,14 +99,42 @@ export default function BudgetOverview() {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
         <CircularProgress />
       </Box>
     );
   }
 
-  const budgetProgress = (budgetData.totalSpent / budgetData.totalBudget) * 100;
-  const savingsProgress = (budgetData.currentSavings / budgetData.savingsGoal) * 100;
+  if (!formattedData) {
+    return (
+      <Box sx={{ textAlign: 'center', py: 4 }}>
+        <Typography variant="h6" color="textSecondary" gutterBottom>
+          No budget data available
+        </Typography>
+        <Button 
+          variant="contained" 
+          color="primary" 
+          component={Link} 
+          to="/dashboard/budget/setup"
+          startIcon={<Settings />}
+        >
+          Set Up Budget
+        </Button>
+      </Box>
+    );
+  }
+
+  const { 
+    totalBudget, 
+    totalSpent, 
+    remainingBudget, 
+    savingsGoal, 
+    currentSavings, 
+    categories 
+  } = formattedData;
+
+  const budgetProgress = (totalSpent / totalBudget) * 100;
+  const savingsProgress = (currentSavings / savingsGoal) * 100;
 
   return (
     <Box>
@@ -179,7 +200,7 @@ export default function BudgetOverview() {
                 </IconButton>
               </Box>
               <Typography variant="h4" component="div" sx={{ mb: 1 }}>
-                ₹{budgetData.totalBudget.toFixed(2)}
+                ₹{totalBudget.toFixed(2)}
               </Typography>
               <LinearProgress 
                 variant="determinate" 
@@ -189,7 +210,7 @@ export default function BudgetOverview() {
               />
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">
-                  Spent: ₹{budgetData.totalSpent.toFixed(2)}
+                  Spent: ₹{totalSpent.toFixed(2)}
                 </Typography>
                 <Typography 
                   variant="body2" 
@@ -209,8 +230,8 @@ export default function BudgetOverview() {
               <Typography variant="h6" gutterBottom>
                 Remaining Budget
               </Typography>
-              <Typography variant="h4" component="div" color={budgetData.remainingBudget < 0 ? "error.main" : "success.main"}>
-                ₹{budgetData.remainingBudget.toFixed(2)}
+              <Typography variant="h4" component="div" color={remainingBudget < 0 ? "error.main" : "success.main"}>
+                ₹{remainingBudget.toFixed(2)}
               </Typography>
               <Box sx={{ mt: 1 }}>
                 <Typography variant="body2" color="text.secondary">
@@ -221,7 +242,7 @@ export default function BudgetOverview() {
                   })}
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  Daily budget remaining: ₹{(budgetData.remainingBudget / 10).toFixed(2)}
+                  Daily budget remaining: ₹{(remainingBudget / 10).toFixed(2)}
                 </Typography>
               </Box>
             </CardContent>
@@ -240,7 +261,7 @@ export default function BudgetOverview() {
                 </IconButton>
               </Box>
               <Typography variant="h4" component="div" sx={{ mb: 1 }}>
-                ₹{budgetData.currentSavings.toFixed(2)}
+                ₹{currentSavings.toFixed(2)}
               </Typography>
               <LinearProgress 
                 variant="determinate" 
@@ -250,7 +271,7 @@ export default function BudgetOverview() {
               />
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="text.secondary">
-                  Goal: ₹{budgetData.savingsGoal.toFixed(2)}
+                  Goal: ₹{savingsGoal.toFixed(2)}
                 </Typography>
                 <Typography variant="body2" color="success.main" fontWeight="medium">
                   {Math.round(savingsProgress)}% Saved
@@ -277,7 +298,7 @@ export default function BudgetOverview() {
               </Button>
             </Box>
             <Divider sx={{ mb: 2 }} />
-            <BudgetChart data={budgetData.categories} />
+            <BudgetChart data={categories} />
           </Paper>
         </Grid>
 

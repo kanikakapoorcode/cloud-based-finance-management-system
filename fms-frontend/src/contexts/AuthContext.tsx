@@ -101,6 +101,8 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setLoading(true);
       setError(null);
       
+      console.log('Attempting login with:', { email: email.substring(0, 3) + '...' });
+      
       // Make the API call with retry mechanism
       const response = await makeApiCall(() => authAPI.login({ email, password }));
       
@@ -120,8 +122,34 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // Store in localStorage with error handling
       try {
-        localStorage.setItem('fms_user', JSON.stringify(userWithToken));
+        // Clear any existing auth data
+        localStorage.clear(); // Clear all items to prevent conflicts
+        
+        // Store new auth data
         localStorage.setItem('fms_token', token);
+        localStorage.setItem('fms_user', JSON.stringify(userWithToken));
+        
+        // Verify token storage
+        const storedToken = localStorage.getItem('fms_token');
+        const storedUser = localStorage.getItem('fms_user');
+        const parsedUser = storedUser ? JSON.parse(storedUser) : null;
+        
+        console.log('Token verification:', {
+          tokenExists: !!storedToken,
+          tokenLength: storedToken ? storedToken.length : 0,
+          userExists: !!storedUser,
+          userId: parsedUser?._id,
+          tokenMatches: storedToken === token
+        });
+        
+        if (!storedToken || !storedUser) {
+          throw new Error('Failed to store authentication data');
+        }
+        
+        // Verify token matches what was received
+        if (storedToken !== token) {
+          throw new Error('Token mismatch between response and storage');
+        }
       } catch (storageError) {
         console.error('Failed to store user data:', storageError);
         throw new Error('Failed to store user data. Please try again.');

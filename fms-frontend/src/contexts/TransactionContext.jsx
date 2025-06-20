@@ -17,18 +17,48 @@ export const TransactionProvider = ({ children }) => {
       setError('User not authenticated');
       return;
     }
+    
+    // Get user ID from user object or localStorage
+    const userId = user.id || user._id || JSON.parse(localStorage.getItem('fms_user') || '{}')?.id;
+    
+    if (!userId) {
+      const errorMsg = 'User ID not available';
+      console.error(errorMsg, { user });
+      setError(errorMsg);
+      setLoading(false);
+      return;
+    }
+    
     try {
       setLoading(true);
       setError(null);
-      console.log('Fetching transactions...');
-      const response = await getTransactions();
-      console.log('Transactions response:', response);
-      if (response && response.success) {
-        setTransactions(response.data || []);
+      console.log('Fetching transactions for user ID:', userId);
+      
+      const response = await getTransactions(userId);
+      console.log('Transactions API response:', response);
+      
+      if (!response) {
+        throw new Error('No response from server');
+      }
+      
+      if (response.error) {
+        throw new Error(response.error);
+      }
+      
+      if (response.status === 401) {
+        throw new Error('Unauthorized: Please log in again');
+      }
+      
+      if (response.status !== 200) {
+        throw new Error(`Server error: ${response.statusText}`);
+      }
+      
+      if (response.data) {
+        console.log('Setting transactions:', response.data);
+        setTransactions(Array.isArray(response.data) ? response.data : []);
       } else {
-        const errorMessage = response?.error || 'Failed to fetch transactions';
-        console.error('Error fetching transactions:', errorMessage);
-        setError(errorMessage);
+        console.error('Invalid response format:', response);
+        setError('Invalid response format from server');
       }
     } catch (err) {
       const errorMessage = err.response?.data?.message || err.message || 'An error occurred while fetching transactions.';
@@ -74,14 +104,14 @@ export const TransactionProvider = ({ children }) => {
     }
   };
 
-  const value = {
-    transactions,
+  const value = React.useMemo(() => ({
+    transactions: Array.isArray(transactions) ? transactions : [],
     loading,
     error,
     addTransaction,
     deleteTransaction,
-    refreshTransactions: fetchTransactions, // Expose a refresh function
-  };
+    refreshTransactions: fetchTransactions,
+  }), [transactions, loading, error, addTransaction, deleteTransaction, fetchTransactions]);
 
   return (
     <TransactionContext.Provider value={value}>

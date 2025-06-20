@@ -8,6 +8,7 @@ import theme from './theme';
 
 // Import context providers
 import { AuthProvider } from './contexts/AuthContext';
+import { BudgetProvider } from './contexts/BudgetContext';
 
 // Import pages
 import Homepage from './pages/Homepage';
@@ -31,37 +32,39 @@ function App() {
         anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
         <AuthProvider>
-          <Routes>
-            <Route path="/" element={<Homepage />} />
-            <Route path="/auth/*" element={<AuthPage />} />
-            <Route 
-              path="/dashboard/*" 
-              element={
-                <PrivateRoute>
-                  <DashboardPage />
-                </PrivateRoute>
-              } 
-            >
-              <Route index element={<DashboardHome />} />
-              <Route path="transactions/*" element={<TransactionsPage />} />
-              <Route path="reports/*" element={<ReportsPage />} />
-              <Route path="budget">
-                <Route index element={<Navigate to="overview" replace />} />
-                <Route path="overview" element={<BudgetOverview />} />
-                <Route path="setup" element={<BudgetSetup />} />
+          <BudgetProvider>
+            <Routes>
+              <Route path="/" element={<Homepage />} />
+              <Route path="/auth/*" element={<AuthPage />} />
+              <Route 
+                path="/dashboard/*" 
+                element={
+                  <PrivateRoute>
+                    <DashboardPage />
+                  </PrivateRoute>
+                } 
+              >
+                <Route index element={<DashboardHome />} />
+                <Route path="transactions/*" element={<TransactionsPage />} />
+                <Route path="reports/*" element={<ReportsPage />} />
+                <Route path="budget">
+                  <Route index element={<Navigate to="overview" replace />} />
+                  <Route path="overview" element={<BudgetOverview />} />
+                  <Route path="setup" element={<BudgetSetup />} />
+                </Route>
+                <Route path="*" element={<Navigate to="transactions" replace />} />
               </Route>
-              <Route path="*" element={<Navigate to="transactions" replace />} />
-            </Route>
-            <Route 
-              path="/profile" 
-              element={
-                <PrivateRoute>
-                  <ProfilePage />
-                </PrivateRoute>
-              } 
-            />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+              <Route 
+                path="/profile" 
+                element={
+                  <PrivateRoute>
+                    <ProfilePage />
+                  </PrivateRoute>
+                } 
+              />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </BudgetProvider>
         </AuthProvider>
       </SnackbarProvider>
     </ThemeProvider>
