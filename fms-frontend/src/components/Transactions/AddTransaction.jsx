@@ -24,9 +24,10 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  CircularProgress
+  CircularProgress,
+  Chip
 } from '@mui/material';
-import { ArrowBack, Chip } from '@mui/icons-material';
+import { ArrowBack } from '@mui/icons-material';
 import { formatCurrency } from '../../utils/formatCurrency';
 import { useTransactions } from '../../contexts/TransactionContext';
 import { categoryAPI } from '../../services/api';
