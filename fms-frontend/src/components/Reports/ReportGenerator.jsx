@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Box, 
   Typography, 
@@ -19,38 +19,589 @@ import {
   Divider,
   Chip,
   Alert,
-  CircularProgress
+  CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  FormControlLabel,
+  Checkbox,
+  IconButton,
+  Tooltip as MuiTooltip,
+  Tabs,
+  Tab,
+  InputAdornment,
+  Menu,
+  ListItemIcon,
+  ListItemText,
+  Collapse,
+  Fade,
+  Zoom
 } from '@mui/material';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, CartesianGrid, XAxis, YAxis } from 'recharts';
+import { 
+  PieChart, 
+  Pie, 
+  Cell, 
+  ResponsiveContainer, 
+  Tooltip as RechartsTooltip, 
+  Legend as RechartsLegend, 
+  BarChart, 
+  Bar, 
+  CartesianGrid, 
+  XAxis, 
+  YAxis,
+  LineChart,
+  Line,
+  RadialBarChart,
+  RadialBar,
+  AreaChart,
+  Area,
+  ReferenceLine
+} from 'recharts';
+import { 
+  Download as DownloadIcon,
+  PictureAsPdf as PdfIcon,
+  GridOn as GridOnIcon,
+  TableChart as TableChartIcon,
+  FilterList as FilterListIcon,
+  Refresh as RefreshIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
+  Add as AddIcon,
+  Remove as RemoveIcon,
+  Close as CloseIcon,
+  SaveAlt as SaveAltIcon,
+  AttachMoney as AttachMoneyIcon,
+  Category as CategoryIcon,
+  DateRange as DateRangeIcon,
+  Search as SearchIcon,
+  Sort as SortIcon,
+  TrendingUp as TrendingUpIcon,
+  TrendingDown as TrendingDownIcon,
+  Equalizer as EqualizerIcon
+} from '@mui/icons-material';
 import { formatCurrency } from '../../utils/formatCurrency';
 import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
+import { useAuth } from '../../contexts/AuthContext';
+import { 
+  getTransactionsReport, 
+  getBudgetReport, 
+  exportReport 
+} from '../../services/reportService';
+import { format, subDays, subMonths, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
+
+// Custom components
+const CustomTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    return (
+      <Paper sx={{ p: 2, border: '1px solid #ddd' }} elevation={3}>
+        <Typography variant="body2" color="text.secondary">
+          {label}
+        </Typography>
+        {payload.map((entry, index) => (
+          <Typography 
+            key={`tooltip-${index}`} 
+            variant="body2"
+            sx={{ color: entry.color }}
+          >
+            {`${entry.name}: ${formatCurrency(entry.value)}`}
+          </Typography>
+        ))}
+      </Paper>
+    );
+  }
+  return null;
+};
+
+const DateRangePreset = ({ label, onClick }) => (
+  <Chip
+    label={label}
+    onClick={onClick}
+    variant="outlined"
+    size="small"
+    sx={{ m: 0.5, cursor: 'pointer' }}
+  />
+);
+
+const ExportMenu = ({ onExport }) => {
+  const [anchorEl, setAnchorEl] = useState(null);
+  const open = Boolean(anchorEl);
+
+  const handleClick = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleExport = (format) => {
+    onExport(format);
+    handleClose();
+  };
+
+  return (
+    <>
+      <Button
+        variant="contained"
+        color="primary"
+        startIcon={<DownloadIcon />}
+        onClick={handleClick}
+        aria-controls={open ? 'export-menu' : undefined}
+        aria-haspopup="true"
+        aria-expanded={open ? 'true' : undefined}
+      >
+        Export
+      </Button>
+      <Menu
+        id="export-menu"
+        anchorEl={anchorEl}
+        open={open}
+        onClose={handleClose}
+        MenuListProps={{
+          'aria-labelledby': 'export-button',
+        }}
+      >
+        <MenuItem onClick={() => handleExport('pdf')}>
+          <ListItemIcon>
+            <PdfIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Export as PDF</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => handleExport('csv')}>
+          <ListItemIcon>
+            <TableChartIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Export as CSV</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => handleExport('excel')}>
+          <ListItemIcon>
+            <GridOnIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Export as Excel</ListItemText>
+        </MenuItem>
+      </Menu>
+    </>
+  );
+};
 
 const ReportGenerator = () => {
+  const { currentUser } = useAuth();
+  const navigate = useNavigate();
+  
+  // Report state
   const [reportType, setReportType] = useState('transactions');
-  const [startDate, setStartDate] = useState(new Date(2025, 4, 1)); // May 1, 2025
-  const [endDate, setEndDate] = useState(new Date(2025, 4, 21)); // May 21, 2025
+  const [dateRange, setDateRange] = useState({
+    startDate: subDays(new Date(), 30),
+    endDate: new Date()
+  });
   const [loading, setLoading] = useState(false);
   const [reportData, setReportData] = useState(null);
   const [error, setError] = useState(null);
+  
+  // Filter state
+  const [filters, setFilters] = useState({
+    search: '',
+    categories: [],
+    minAmount: '',
+    maxAmount: '',
+    transactionType: 'all', // 'all', 'income', 'expense'
+    sortBy: 'date',
+    sortOrder: 'desc'
+  });
+  
+  // UI state
+  const [showFilters, setShowFilters] = useState(false);
+  const [showAllCategories, setShowAllCategories] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
+  const [availableCategories, setAvailableCategories] = useState([]);
+  
+  // Date presets
+  const datePresets = [
+    { label: 'Today', getRange: () => ({ startDate: new Date(), endDate: new Date() }) },
+    { label: 'Yesterday', getRange: () => ({ startDate: subDays(new Date(), 1), endDate: subDays(new Date(), 1) }) },
+    { label: 'Last 7 Days', getRange: () => ({ startDate: subDays(new Date(), 6), endDate: new Date() }) },
+    { label: 'Last 30 Days', getRange: () => ({ startDate: subDays(new Date(), 29), endDate: new Date() }) },
+    { label: 'This Month', getRange: () => ({ startDate: startOfMonth(new Date()), endDate: new Date() }) },
+    { label: 'Last Month', getRange: () => ({
+      startDate: startOfMonth(subMonths(new Date(), 1)),
+      endDate: endOfMonth(subMonths(new Date(), 1))
+    }) },
+    { label: 'This Year', getRange: () => ({ startDate: startOfYear(new Date()), endDate: new Date() }) },
+    { label: 'Custom', getRange: null }
+  ];
+  
+  // Chart types for different report types
+  const chartTypes = {
+    transactions: ['bar', 'line'],
+    income: ['pie', 'bar', 'area'],
+    expenses: ['pie', 'bar', 'radial'],
+    budget: ['bar', 'line']
+  };
+  
+  const [selectedChartType, setSelectedChartType] = useState('bar');
+  
+  // Fetch categories on component mount
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        // Replace with actual API call to fetch categories
+        const mockCategories = [
+          'Housing', 'Food', 'Transport', 'Utilities', 'Entertainment', 
+          'Shopping', 'Healthcare', 'Education', 'Insurance', 'Investments',
+          'Salary', 'Freelance', 'Business', 'Gifts', 'Other'
+        ];
+        setAvailableCategories(mockCategories);
+      } catch (err) {
+        console.error('Error fetching categories:', err);
+      }
+    };
+    
+    fetchCategories();
+  }, []);
+  
+  // Apply date range preset
+  const applyDatePreset = (preset) => {
+    if (preset.getRange) {
+      const range = preset.getRange();
+      setDateRange(range);
+    }
+  };
 
-  // Enhanced PDF download function with better formatting
-  const handleDownloadPDF = () => {
+  // Generate report with API call
+  const handleGenerateReport = async () => {
+    if (!currentUser) {
+      navigate('/login', { state: { from: '/reports' } });
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const { startDate, endDate } = dateRange;
+      const { search, categories, minAmount, maxAmount, transactionType, sortBy, sortOrder } = filters;
+      
+      // Validate dates
+      if (startDate > endDate) {
+        throw new Error('Start date cannot be after end date');
+      }
+      
+      // Prepare API parameters
+      const params = {
+        startDate: format(startDate, 'yyyy-MM-dd'),
+        endDate: format(endDate, 'yyyy-MM-dd'),
+        sortBy,
+        sortOrder,
+        search: search || undefined,
+        categories: categories.length ? categories.join(',') : undefined,
+        minAmount: minAmount || undefined,
+        maxAmount: maxAmount || undefined,
+        type: transactionType !== 'all' ? transactionType : undefined
+      };
+      
+      let response;
+      
+      // Call appropriate API based on report type
+      switch (reportType) {
+        case 'transactions':
+        case 'income':
+        case 'expenses':
+          response = await getTransactionsReport(params);
+          break;
+          
+        case 'budget':
+          response = await getBudgetReport({
+            month: startDate.getMonth() + 1,
+            year: startDate.getFullYear()
+          });
+          break;
+          
+        default:
+          throw new Error('Invalid report type');
+      }
+      
+      // Process and set report data
+      setReportData(processReportData(response.data, reportType));
+      
+    } catch (err) {
+      console.error('Error generating report:', err);
+      setError(err.response?.data?.message || err.message || 'Failed to generate report');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Process raw API data into formatted report data
+  const processReportData = (data, type) => {
+    if (!data) return null;
+    
+    switch (type) {
+      case 'transactions':
+        return {
+          ...data,
+          summary: {
+            ...data.summary,
+            netAmount: data.summary.totalIncome - data.summary.totalExpenses
+          }
+        };
+        
+      case 'income':
+        return {
+          ...data,
+          summary: {
+            totalIncome: data.summary?.total || 0,
+            incomeByCategory: data.summary?.byCategory || {}
+          }
+        };
+        
+      case 'expenses':
+        return {
+          ...data,
+          summary: {
+            totalExpenses: data.summary?.total || 0,
+            expensesByCategory: data.summary?.byCategory || {},
+            chartData: Object.entries(data.summary?.byCategory || {}).map(([name, value]) => ({
+              name,
+              value: Math.abs(value)
+            }))
+          }
+        };
+        
+      case 'budget':
+        return {
+          ...data,
+          summary: {
+            totalBudget: data.summary?.totalBudget || 0,
+            totalActual: data.summary?.totalActual || 0,
+            remaining: (data.summary?.totalBudget || 0) - (data.summary?.totalActual || 0)
+          },
+          data: data.data.map(item => ({
+            ...item,
+            remaining: item.budget - item.actual,
+            percentUsed: (item.actual / item.budget) * 100
+          }))
+        };
+        
+      default:
+        return data;
+    }
+  };
+  
+  // Export report in different formats
+  const handleExportReport = async (format) => {
     if (!reportData) {
-      setError('No report data available to download');
+      setError('No report data available to export');
       return;
     }
     
     try {
       setLoading(true);
       
-      // Get the report title based on report type
-      let reportTitle = 'Financial Report';
-      if (reportType === 'transactions') reportTitle = 'Transaction Report';
-      if (reportType === 'income') reportTitle = 'Income Analysis';
-      if (reportType === 'expenses') reportTitle = 'Expense Analysis';
-      if (reportType === 'budget') reportTitle = 'Budget vs Actual';
+      const { startDate, endDate } = dateRange;
+      const filename = `${reportType}_report_${format(startDate, 'yyyyMMdd')}_to_${format(endDate, 'yyyyMMdd')}`;
+      
+      switch (format) {
+        case 'pdf':
+          exportToPDF(reportData, filename);
+          break;
+          
+        case 'csv':
+          exportToCSV(reportData, filename);
+          break;
+          
+        case 'excel':
+          exportToExcel(reportData, filename);
+          break;
+          
+        default:
+          throw new Error('Unsupported export format');
+      }
+      
+    } catch (err) {
+      console.error('Export error:', err);
+      setError(`Failed to export report: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Export to PDF
+  const exportToPDF = (data, filename) => {
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: 'a4'
+    });
+    
+    // Add header
+    doc.setFillColor(41, 98, 255);
+    doc.rect(0, 0, 297, 15, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Finance Management System', 148.5, 10, { align: 'center' });
+    
+    // Add report title
+    const reportTitle = {
+      transactions: 'Transaction Report',
+      income: 'Income Analysis',
+      expenses: 'Expense Analysis',
+      budget: 'Budget vs Actual'
+    }[reportType] || 'Financial Report';
+    
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(18);
+    doc.text(reportTitle, 148.5, 25, { align: 'center' });
+    
+    // Add date range
+    doc.setFontSize(12);
+    doc.text(`Period: ${format(dateRange.startDate, 'MMM d, yyyy')} to ${format(dateRange.endDate, 'MMM d, yyyy')}`, 
+      148.5, 32, { align: 'center' });
+    
+    // Add generation timestamp
+    doc.setFontSize(9);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Generated on: ${new Date().toLocaleString('en-IN')}`, 148.5, 38, { align: 'center' });
+    
+    // Add summary section
+    doc.setFillColor(240, 240, 240);
+    doc.rect(15, 45, 267, 40, 'F');
+    
+    // ... rest of the PDF generation code ...
+    
+    doc.save(`${filename}.pdf`);
+  };
+  
+  // Export to CSV
+  const exportToCSV = (data, filename) => {
+    let csvContent = '';
+    
+    // Add headers
+    const headers = [];
+    const rows = [];
+    
+    if (reportType === 'transactions' || reportType === 'income' || reportType === 'expenses') {
+      headers.push('Date', 'Description', 'Category', 'Amount');
+      
+      data.data.forEach(item => {
+        rows.push([
+          format(new Date(item.date), 'yyyy-MM-dd'),
+          `"${item.description}"`,
+          item.category,
+          item.amount
+        ]);
+      });
+      
+    } else if (reportType === 'budget') {
+      headers.push('Category', 'Budget', 'Actual', 'Remaining', '% Used', 'Status');
+      
+      data.data.forEach(item => {
+        rows.push([
+          item.category,
+          item.budget,
+          item.actual,
+          item.remaining,
+          item.percentUsed.toFixed(1),
+          item.percentUsed > 90 ? 'Critical' : item.percentUsed > 75 ? 'Warning' : 'On Track'
+        ]);
+      });
+    }
+    
+    // Combine headers and rows
+    csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+    
+    // Create and trigger download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    saveAs(blob, `${filename}.csv`);
+  };
+  
+  // Export to Excel
+  const exportToExcel = (data, filename) => {
+    const wb = XLSX.utils.book_new();
+    
+    if (reportType === 'transactions' || reportType === 'income' || reportType === 'expenses') {
+      const wsData = [
+        ['Date', 'Description', 'Category', 'Amount'],
+        ...data.data.map(item => [
+          format(new Date(item.date), 'yyyy-MM-dd'),
+          item.description,
+          item.category,
+          item.amount
+        ])
+      ];
+      
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      XLSX.utils.book_append_sheet(wb, ws, 'Transactions');
+      
+    } else if (reportType === 'budget') {
+      const wsData = [
+        ['Category', 'Budget', 'Actual', 'Remaining', '% Used', 'Status'],
+        ...data.data.map(item => [
+          item.category,
+          item.budget,
+          item.actual,
+          item.remaining,
+          item.percentUsed.toFixed(1),
+          item.percentUsed > 90 ? 'Critical' : item.percentUsed > 75 ? 'Warning' : 'On Track'
+        ])
+      ];
+      
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      XLSX.utils.book_append_sheet(wb, ws, 'Budget');
+    }
+    
+    // Generate and trigger download
+    XLSX.writeFile(wb, `${filename}.xlsx`);
+  };
+  
+  // Handle filter changes
+  const handleFilterChange = (field, value) => {
+    setFilters(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+  
+  // Toggle category selection
+  const toggleCategory = (category) => {
+    setFilters(prev => ({
+      ...prev,
+      categories: prev.categories.includes(category)
+        ? prev.categories.filter(c => c !== category)
+        : [...prev.categories, category]
+    }));
+  };
+  
+  // Toggle sort order
+  const toggleSortOrder = () => {
+    setFilters(prev => ({
+      ...prev,
+      sortOrder: prev.sortOrder === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+  
+  // Reset all filters
+  const resetFilters = () => {
+    setFilters({
+      search: '',
+      categories: [],
+      minAmount: '',
+      maxAmount: '',
+      transactionType: 'all',
+      sortBy: 'date',
+      sortOrder: 'desc'
+    });
+  };
       
       // Format dates for filename
       const startDateStr = formatDate(startDate).replace(/\s/g, '-');
@@ -422,133 +973,129 @@ const ReportGenerator = () => {
     }
   };
 
-  // Mock transaction data
-  const mockTransactions = [
-    { id: 1, date: '2025-05-18', description: 'Salary', amount: 45000, category: 'income' },
-    { id: 2, date: '2025-05-10', description: 'Rent Payment', amount: -15000, category: 'housing' },
-    { id: 3, date: '2025-05-21', description: 'Grocery Shopping', amount: -2450, category: 'food' },
-    { id: 4, date: '2025-05-16', description: 'Restaurant Bill', amount: -1200, category: 'food' },
-    { id: 5, date: '2025-05-14', description: 'Petrol', amount: -1500, category: 'transport' },
-    { id: 6, date: '2025-05-08', description: 'Movie Tickets', amount: -800, category: 'entertainment' },
-    { id: 7, date: '2025-05-05', description: 'Electricity Bill', amount: -2200, category: 'utilities' },
-    { id: 8, date: '2025-05-03', description: 'Freelance Work', amount: 12000, category: 'income' },
-    { id: 9, date: '2025-05-01', description: 'Online Shopping', amount: -3500, category: 'shopping' },
-    { id: 10, date: '2025-04-28', description: 'Mobile Recharge', amount: -499, category: 'utilities' },
-    { id: 11, date: '2025-04-25', description: 'Gym Membership', amount: -1800, category: 'other' },
-    { id: 12, date: '2025-04-22', description: 'Birthday Gift', amount: -1000, category: 'other' }
-  ];
-
-  // Mock budget data
-  const mockBudgetData = [
-    { category: 'Housing', budget: 20000, actual: 15000 },
-    { category: 'Food', budget: 8000, actual: 3650 },
-    { category: 'Transport', budget: 5000, actual: 3000 },
-    { category: 'Entertainment', budget: 5000, actual: 4500 },
-    { category: 'Utilities', budget: 3000, actual: 2699 },
-    { category: 'Shopping', budget: 4000, actual: 3500 },
-    { category: 'Other', budget: 3000, actual: 2800 }
-  ];
-
   // Colors for charts
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658'];
+  
+  // Process API response data into consistent format
+  const processReportData = (data, type) => {
+    if (!data) return null;
+    
+    switch (type) {
+      case 'transactions':
+        return {
+          ...data,
+          summary: {
+            ...data.summary,
+            netAmount: (data.summary?.totalIncome || 0) - (data.summary?.totalExpenses || 0)
+          }
+        };
+        
+      case 'income':
+        return {
+          ...data,
+          summary: {
+            totalIncome: data.summary?.total || 0,
+            incomeByCategory: data.summary?.byCategory || {}
+          }
+        };
+        
+      case 'expenses':
+        return {
+          ...data,
+          summary: {
+            totalExpenses: data.summary?.total || 0,
+            expensesByCategory: data.summary?.byCategory || {},
+            chartData: Object.entries(data.summary?.byCategory || {}).map(([name, value]) => ({
+              name,
+              value: Math.abs(value)
+            }))
+          }
+        };
+        
+      case 'budget':
+        return {
+          ...data,
+          summary: {
+            totalBudget: data.summary?.totalBudget || 0,
+            totalActual: data.summary?.totalActual || 0,
+            remaining: (data.summary?.totalBudget || 0) - (data.summary?.totalActual || 0)
+          },
+          data: data.data?.map(item => ({
+            ...item,
+            remaining: item.budget - item.actual,
+            percentUsed: (item.actual / item.budget) * 100
+          })) || []
+        };
+        
+      default:
+        return data;
+    }
+  };
 
-  const handleGenerateReport = () => {
+  const handleGenerateReport = async () => {
+    if (!currentUser) {
+      navigate('/login', { state: { from: '/reports' } });
+      return;
+    }
+
     setLoading(true);
     setError(null);
     
-    // Simulate API call delay
-    setTimeout(() => {
-      try {
-        // Filter transactions based on date range
-        const startDateObj = new Date(startDate);
-        const endDateObj = new Date(endDate);
-        
-        if (startDateObj > endDateObj) {
-          throw new Error('Start date cannot be after end date');
-        }
-        
-        const filteredTransactions = mockTransactions.filter(t => {
-          const transactionDate = new Date(t.date);
-          return transactionDate >= startDateObj && transactionDate <= endDateObj;
-        });
-        
-        // Generate different reports based on type
-        let reportResult;
-        
-        switch(reportType) {
-          case 'transactions':
-            reportResult = {
-              type: 'transactions',
-              data: filteredTransactions,
-              summary: {
-                totalTransactions: filteredTransactions.length,
-                totalIncome: filteredTransactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0),
-                totalExpenses: Math.abs(filteredTransactions.filter(t => t.amount < 0).reduce((sum, t) => sum + t.amount, 0)),
-                netAmount: filteredTransactions.reduce((sum, t) => sum + t.amount, 0)
-              }
-            };
-            break;
-            
-          case 'income':
-            const incomeTransactions = filteredTransactions.filter(t => t.amount > 0);
-            reportResult = {
-              type: 'income',
-              data: incomeTransactions,
-              summary: {
-                totalIncome: incomeTransactions.reduce((sum, t) => sum + t.amount, 0),
-                incomeByCategory: incomeTransactions.reduce((acc, t) => {
-                  acc[t.category] = (acc[t.category] || 0) + t.amount;
-                  return acc;
-                }, {})
-              }
-            };
-            break;
-            
-          case 'expenses':
-            const expenseTransactions = filteredTransactions.filter(t => t.amount < 0);
-            const expensesByCategory = expenseTransactions.reduce((acc, t) => {
-              acc[t.category] = (acc[t.category] || 0) + Math.abs(t.amount);
-              return acc;
-            }, {});
-            
-            reportResult = {
-              type: 'expenses',
-              data: expenseTransactions,
-              summary: {
-                totalExpenses: Math.abs(expenseTransactions.reduce((sum, t) => sum + t.amount, 0)),
-                expensesByCategory: expensesByCategory,
-                chartData: Object.entries(expensesByCategory).map(([category, amount]) => ({
-                  name: category,
-                  value: amount
-                }))
-              }
-            };
-            break;
-            
-          case 'budget':
-            reportResult = {
-              type: 'budget',
-              data: mockBudgetData,
-              summary: {
-                totalBudget: mockBudgetData.reduce((sum, item) => sum + item.budget, 0),
-                totalActual: mockBudgetData.reduce((sum, item) => sum + item.actual, 0),
-                remaining: mockBudgetData.reduce((sum, item) => sum + (item.budget - item.actual), 0)
-              }
-            };
-            break;
-            
-          default:
-            reportResult = { type: 'unknown', data: [] };
-        }
-        
-        setReportData(reportResult);
-      } catch (err) {
-        console.error('Error generating report:', err);
-        setError(err.message || 'Failed to generate report');
-      } finally {
-        setLoading(false);
+    try {
+      const { startDate: start, endDate: end } = dateRange;
+      const { search, categories, minAmount, maxAmount, transactionType, sortBy, sortOrder } = filters;
+      
+      // Validate dates
+      if (new Date(start) > new Date(end)) {
+        throw new Error('Start date cannot be after end date');
       }
-    }, 1000);
+      
+      // Prepare API parameters
+      const params = {
+        startDate: format(new Date(start), 'yyyy-MM-dd'),
+        endDate: format(new Date(end), 'yyyy-MM-dd'),
+        search,
+        categories: categories.join(','),
+        minAmount,
+        maxAmount,
+        type: transactionType !== 'all' ? transactionType : undefined,
+        sortBy,
+        sortOrder
+      };
+      
+      let response;
+      
+      switch(reportType) {
+        case 'transactions':
+        case 'income':
+        case 'expenses':
+          response = await getTransactionsReport({
+            ...params,
+            type: reportType === 'transactions' ? undefined : reportType
+          });
+          break;
+          
+        case 'budget':
+          response = await getBudgetReport({
+            month: new Date(start).getMonth() + 1,
+            year: new Date(start).getFullYear(),
+            categories: categories.join(',')
+          });
+          break;
+          
+        default:
+          throw new Error('Invalid report type');
+      }
+      
+      // Process and set report data
+      setReportData(processReportData(response.data, reportType));
+      
+    } catch (err) {
+      console.error('Error generating report:', err);
+      setError(err.response?.data?.message || err.message || 'Failed to generate report');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Format date for display
@@ -559,9 +1106,24 @@ const ReportGenerator = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" component="h1" gutterBottom fontWeight="bold">
-        Financial Reports
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4" component="h1" fontWeight="bold">
+          Financial Reports
+        </Typography>
+        {reportData && (
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <Button 
+              variant="outlined" 
+              startIcon={<FilterListIcon />}
+              onClick={() => setShowFilters(!showFilters)}
+              sx={{ minWidth: 120 }}
+            >
+              {showFilters ? 'Hide Filters' : 'Show Filters'}
+            </Button>
+            <ExportMenu onExport={handleExportReport} />
+          </Box>
+        )}
+      </Box>
       
       <Paper elevation={3} sx={{ p: 3, mb: 3, borderRadius: 2 }}>
         <Typography variant="h6" gutterBottom fontWeight="medium" color="primary">
@@ -570,7 +1132,7 @@ const ReportGenerator = () => {
         <Divider sx={{ mb: 3 }} />
         
         <Grid container spacing={3}>
-          <Grid item xs={12} md={4}>
+          <Grid item xs={12} md={3}>
             <FormControl fullWidth>
               <InputLabel id="report-type-label">Report Type</InputLabel>
               <Select
@@ -588,67 +1150,513 @@ const ReportGenerator = () => {
             </FormControl>
           </Grid>
           
-          <Grid item xs={12} md={4}>
+          <Grid item xs={12} md={3}>
             <LocalizationProvider dateAdapter={AdapterDateFns}>
               <DatePicker
                 label="Start Date"
-                value={startDate}
-                onChange={(newValue) => setStartDate(newValue)}
-                renderInput={(params) => <TextField {...params} fullWidth />}
+                value={dateRange.startDate}
+                onChange={(newValue) => setDateRange(prev => ({ ...prev, startDate: newValue }))}
+                renderInput={(params) => (
+                  <TextField 
+                    {...params} 
+                    fullWidth 
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <DateRangeIcon color="action" />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                )}
               />
             </LocalizationProvider>
           </Grid>
           
-          <Grid item xs={12} md={4}>
+          <Grid item xs={12} md={3}>
             <LocalizationProvider dateAdapter={AdapterDateFns}>
               <DatePicker
                 label="End Date"
-                value={endDate}
-                onChange={(newValue) => setEndDate(newValue)}
-                renderInput={(params) => <TextField {...params} fullWidth />}
+                value={dateRange.endDate}
+                onChange={(newValue) => setDateRange(prev => ({ ...prev, endDate: newValue }))}
+                renderInput={(params) => (
+                  <TextField 
+                    {...params} 
+                    fullWidth 
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <DateRangeIcon color="action" />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                )}
               />
             </LocalizationProvider>
           </Grid>
           
-          <Grid item xs={12}>
+          <Grid item xs={12} md={3} sx={{ display: 'flex', alignItems: 'flex-end' }}>
             <Button 
               variant="contained" 
               color="primary" 
               onClick={handleGenerateReport}
               size="large"
               disabled={loading}
-              sx={{ mt: 1 }}
+              fullWidth
+              startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <RefreshIcon />}
             >
               {loading ? 'Generating...' : 'Generate Report'}
             </Button>
           </Grid>
+          
+          {/* Date Presets */}
+          <Grid item xs={12}>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: -1 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mr: 1, alignSelf: 'center' }}>
+                Quick Select:
+              </Typography>
+              {datePresets.map((preset) => (
+                <DateRangePreset
+                  key={preset.label}
+                  label={preset.label}
+                  onClick={() => applyDatePreset(preset)}
+                />
+              ))}
+            </Box>
+          </Grid>
         </Grid>
+        
+        {/* Advanced Filters */}
+        <Collapse in={showFilters} timeout="auto" unmountOnExit>
+          <Paper elevation={0} sx={{ p: 2, mt: 3, bgcolor: 'background.default', borderRadius: 1 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="subtitle1" fontWeight="medium">
+                Advanced Filters
+              </Typography>
+              <Button 
+                size="small" 
+                onClick={resetFilters}
+                startIcon={<CloseIcon fontSize="small" />}
+              >
+                Clear All
+              </Button>
+            </Box>
+            
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={4}>
+                <TextField
+                  fullWidth
+                  label="Search Transactions"
+                  variant="outlined"
+                  size="small"
+                  value={filters.search}
+                  onChange={(e) => handleFilterChange('search', e.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon color="action" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={4}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Transaction Type</InputLabel>
+                  <Select
+                    value={filters.transactionType}
+                    onChange={(e) => handleFilterChange('transactionType', e.target.value)}
+                    label="Transaction Type"
+                  >
+                    <MenuItem value="all">All Transactions</MenuItem>
+                    <MenuItem value="income">Income Only</MenuItem>
+                    <MenuItem value="expense">Expenses Only</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} md={2}>
+                <TextField
+                  fullWidth
+                  label="Min Amount"
+                  variant="outlined"
+                  size="small"
+                  type="number"
+                  value={filters.minAmount}
+                  onChange={(e) => handleFilterChange('minAmount', e.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <AttachMoneyIcon fontSize="small" color="action" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={2}>
+                <TextField
+                  fullWidth
+                  label="Max Amount"
+                  variant="outlined"
+                  size="small"
+                  type="number"
+                  value={filters.maxAmount}
+                  onChange={(e) => handleFilterChange('maxAmount', e.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <AttachMoneyIcon fontSize="small" color="action" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+              
+              <Grid item xs={12}>
+                <FormControl component="fieldset" variant="standard">
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    Categories:
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                    {availableCategories.slice(0, 10).map((category) => (
+                      <Chip
+                        key={category}
+                        label={category}
+                        onClick={() => toggleCategory(category)}
+                        variant={filters.categories.includes(category) ? 'filled' : 'outlined'}
+                        color={filters.categories.includes(category) ? 'primary' : 'default'}
+                        size="small"
+                        clickable
+                      />
+                    ))}
+                    {availableCategories.length > 10 && (
+                      <Chip
+                        label={`+${availableCategories.length - 10} more`}
+                        size="small"
+                        onClick={() => setShowAllCategories(!showAllCategories)}
+                        clickable
+                      />
+                    )}
+                  </Box>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12}>
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+                  <Button 
+                    variant="outlined" 
+                    size="small"
+                    onClick={resetFilters}
+                    startIcon={<CloseIcon />}
+                  >
+                    Reset
+                  </Button>
+                  <Button 
+                    variant="contained" 
+                    size="small"
+                    onClick={handleGenerateReport}
+                    startIcon={<FilterListIcon />}
+                  >
+                    Apply Filters
+                  </Button>
+                </Box>
+              </Grid>
+            </Grid>
+          </Paper>
+        </Collapse>
       </Paper>
       
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert 
+          severity="error" 
+          sx={{ mb: 3 }}
+          action={
+            <IconButton
+              aria-label="close"
+              color="inherit"
+              size="small"
+              onClick={() => setError(null)}
+            >
+              <CloseIcon fontSize="inherit" />
+            </IconButton>
+          }
+        >
           {error}
         </Alert>
       )}
       
       {loading ? (
-        <Paper elevation={3} sx={{ p: 5, textAlign: 'center', borderRadius: 2 }}>
-          <CircularProgress />
-          <Typography sx={{ mt: 2 }}>Generating your report...</Typography>
+        <Paper elevation={3} sx={{ p: 5, textAlign: 'center', borderRadius: 2, minHeight: '300px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <CircularProgress size={60} thickness={4} sx={{ mb: 3, mx: 'auto' }} />
+          <Typography variant="h6" color="text.secondary">Generating your report...</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            This may take a moment depending on the data size
+          </Typography>
         </Paper>
       ) : reportData ? (
-        <Paper elevation={3} sx={{ p: 3, borderRadius: 2 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography variant="h6" fontWeight="medium">
-              {reportType === 'transactions' && 'Transaction Report'}
-              {reportType === 'income' && 'Income Analysis'}
-              {reportType === 'expenses' && 'Expense Analysis'}
-              {reportType === 'budget' && 'Budget vs Actual'}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {formatDate(startDate)} - {formatDate(endDate)}
-            </Typography>
+        <Box sx={{ position: 'relative' }}>
+          {/* Report Actions */}
+          <Box sx={{ position: 'absolute', top: 8, right: 0, zIndex: 1, display: 'flex', gap: 1 }}>
+            <MuiTooltip title="Refresh data">
+              <IconButton 
+                size="small" 
+                onClick={handleGenerateReport}
+                disabled={loading}
+              >
+                <RefreshIcon />
+              </IconButton>
+            </MuiTooltip>
+            <ExportMenu onExport={handleExportReport} />
           </Box>
+          
+          {/* Report Tabs */}
+          <Paper sx={{ mb: 3, borderRadius: 2, overflow: 'hidden' }}>
+            <Tabs 
+              value={activeTab} 
+              onChange={(e, newValue) => setActiveTab(newValue)}
+              variant="scrollable"
+              scrollButtons="auto"
+              sx={{
+                bgcolor: 'background.paper',
+                borderBottom: 1,
+                borderColor: 'divider',
+                '& .MuiTabs-indicator': {
+                  height: 3,
+                  borderRadius: '3px 3px 0 0'
+                }
+              }}
+            >
+              <Tab 
+                label="Summary" 
+                icon={<EqualizerIcon />} 
+                iconPosition="start"
+                sx={{ minHeight: 48, textTransform: 'none' }}
+              />
+              <Tab 
+                label="Charts" 
+                icon={<TrendingUpIcon />} 
+                iconPosition="start"
+                sx={{ minHeight: 48, textTransform: 'none' }}
+              />
+              <Tab 
+                label="Details" 
+                icon={<TableChartIcon />} 
+                iconPosition="start"
+                sx={{ minHeight: 48, textTransform: 'none' }}
+              />
+            </Tabs>
+          </Paper>
+          {/* Tab Panels */}
+          <Box sx={{ mt: 2 }}>
+            {/* Summary Tab */}
+            <TabPanel value={activeTab} index={0}>
+              <Box sx={{ mb: 4 }}>
+                <Typography variant="h6" gutterBottom fontWeight="medium">
+                  {reportType === 'transactions' && 'Transaction Summary'}
+                  {reportType === 'income' && 'Income Summary'}
+                  {reportType === 'expenses' && 'Expense Summary'}
+                  {reportType === 'budget' && 'Budget Overview'}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  {format(dateRange.startDate, 'MMM d, yyyy')} - {format(dateRange.endDate, 'MMM d, yyyy')}
+                </Typography>
+                
+                {/* Summary Cards */}
+                <Grid container spacing={3} sx={{ mb: 4 }}>
+                  {renderSummaryCards()}
+                </Grid>
+                
+                {/* Quick Stats */}
+                <Paper elevation={0} sx={{ p: 2, mb: 4, bgcolor: 'background.default', borderRadius: 2 }}>
+                  <Typography variant="subtitle1" gutterBottom fontWeight="medium">
+                    Quick Statistics
+                  </Typography>
+                  <Grid container spacing={2}>
+                    {renderQuickStats()}
+                  </Grid>
+                </Paper>
+              </Box>
+            </TabPanel>
+            
+            {/* Charts Tab */}
+            <TabPanel value={activeTab} index={1}>
+              <Box sx={{ mb: 4 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                  <Typography variant="h6" fontWeight="medium">
+                    {reportType === 'budget' ? 'Budget vs Actual' : 'Spending Trends'}
+                  </Typography>
+                  {chartTypes[reportType]?.length > 1 && (
+                    <FormControl size="small" variant="outlined">
+                      <Select
+                        value={selectedChartType}
+                        onChange={(e) => setSelectedChartType(e.target.value)}
+                        sx={{ minWidth: 120 }}
+                      >
+                        {chartTypes[reportType].map((type) => (
+                          <MenuItem key={type} value={type}>
+                            {type.charAt(0).toUpperCase() + type.slice(1)}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  )}
+                </Box>
+                
+                <Grid container spacing={3}>
+                  <Grid item xs={12} md={8}>
+                    <Paper elevation={0} sx={{ p: 2, height: '100%', minHeight: 400, borderRadius: 2, bgcolor: 'background.paper' }}>
+                      {renderMainChart()}
+                    </Paper>
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <Paper elevation={0} sx={{ p: 2, height: '100%', minHeight: 400, borderRadius: 2, bgcolor: 'background.paper' }}>
+                      {renderSecondaryChart()}
+                    </Paper>
+                  </Grid>
+                </Grid>
+                
+                {reportType !== 'budget' && (
+                  <Box sx={{ mt: 4 }}>
+                    <Typography variant="subtitle1" gutterBottom fontWeight="medium">
+                      Category Breakdown
+                    </Typography>
+                    <Paper elevation={0} sx={{ p: 2, borderRadius: 2, bgcolor: 'background.paper' }}>
+                      {renderCategoryBreakdown()}
+                    </Paper>
+                  </Box>
+                )}
+              </Box>
+            </TabPanel>
+            
+            {/* Details Tab */}
+            <TabPanel value={activeTab} index={2}>
+              <Box sx={{ mb: 4 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                  <Typography variant="h6" fontWeight="medium">
+                    {reportType === 'transactions' && 'Transaction Details'}
+                    {reportType === 'income' && 'Income Details'}
+                    {reportType === 'expenses' && 'Expense Details'}
+                    {reportType === 'budget' && 'Budget Details'}
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <TextField
+                      size="small"
+                      placeholder="Search..."
+                      variant="outlined"
+                      value={filters.search}
+                      onChange={(e) => handleFilterChange('search', e.target.value)}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <SearchIcon fontSize="small" color="action" />
+                          </InputAdornment>
+                        ),
+                      }}
+                    />
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={toggleSortOrder}
+                      startIcon={<SortIcon />}
+                    >
+                      {filters.sortOrder === 'asc' ? 'Oldest' : 'Newest'}
+                    </Button>
+                  </Box>
+                </Box>
+                
+                <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden' }}>
+                  {renderDataTable()}
+                  
+                  {/* Pagination */}
+                  {reportData.data.length > 0 && (
+                    <Box sx={{ p: 2, display: 'flex', justifyContent: 'flex-end', borderTop: 1, borderColor: 'divider' }}>
+                      <Pagination 
+                        count={Math.ceil(reportData.data.length / 10)} 
+                        color="primary" 
+                        shape="rounded"
+                        showFirstButton 
+                        showLastButton
+                      />
+                    </Box>
+                  )}
+                </Paper>
+              </Box>
+            </TabPanel>
+          </Box>
+        </Box>
+      ) : (
+        <Paper elevation={3} sx={{ p: 5, textAlign: 'center', borderRadius: 2, minHeight: '300px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <EqualizerIcon color="disabled" sx={{ fontSize: 60, mb: 2, mx: 'auto' }} />
+          <Typography variant="h6" color="text.secondary" gutterBottom>
+            No Report Generated
+          </Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 500, mx: 'auto' }}>
+            Select a report type and date range, then click "Generate Report" to view your financial data.
+          </Typography>
+          <Button 
+            variant="contained" 
+            color="primary" 
+            onClick={handleGenerateReport}
+            size="large"
+            sx={{ mt: 3, mx: 'auto', minWidth: 200 }}
+            startIcon={<RefreshIcon />}
+          >
+            Generate Report
+          </Button>
+        </Paper>
+      )}
+    </Box>
+  );
+};
+
+// Tab Panel Component
+function TabPanel(props) {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`report-tabpanel-${index}`}
+      aria-labelledby={`report-tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ p: 3 }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+}
+
+TabPanel.propTypes = {
+  children: PropTypes.node,
+  index: PropTypes.number.isRequired,
+  value: PropTypes.number.isRequired,
+};
+
+// Helper function to generate chart colors
+const generateChartColors = (count) => {
+  const colors = [
+    '#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', 
+    '#82ca9d', '#ffc658', '#ff7c43', '#665191', '#a05195',
+    '#f95d6a', '#ffa600', '#003f5c', '#2f4b7c', '#665191'
+  ];
+  return colors.slice(0, count);
+};
+
+// Helper function to format currency with proper sign
+const formatCurrencyWithSign = (value, type = 'expense') => {
+  const absValue = Math.abs(value);
+  const formatted = formatCurrency(absValue);
+  return type === 'income' ? `+${formatted}` : `-${formatted}`;
+};
+
+export default ReportGenerator;
           
           <Divider sx={{ mb: 3 }} />
           
