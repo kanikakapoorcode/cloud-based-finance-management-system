@@ -13,13 +13,18 @@ export const TransactionProvider = ({ children }) => {
   const { user } = useAuth();
 
   const fetchTransactions = useCallback(async () => {
+    console.log('=== fetchTransactions called ===');
+    console.log('Current user:', user);
+    
     if (!user) {
-      setError('User not authenticated');
+      console.log('User not yet available, will retry when user is available');
+      setLoading(false);
       return;
     }
     
     // Get user ID from user object or localStorage
-    const userId = user.id || user._id || JSON.parse(localStorage.getItem('fms_user') || '{}')?.id;
+    const userId = user.id || user._id || JSON.parse(localStorage.getItem('fms_user') || '{}')?._id;
+    console.log('User ID:', userId);
     
     if (!userId) {
       const errorMsg = 'User ID not available';
@@ -34,32 +39,20 @@ export const TransactionProvider = ({ children }) => {
       setError(null);
       console.log('Fetching transactions for user ID:', userId);
       
-      const response = await getTransactions(userId);
-      console.log('Transactions API response:', response);
+      const transactions = await getTransactions(userId);
+      console.log('Fetched transactions:', transactions);
       
-      if (!response) {
-        throw new Error('No response from server');
+      if (!transactions) {
+        console.warn('No transactions data received');
+        setTransactions([]);
+        return;
       }
       
-      if (response.error) {
-        throw new Error(response.error);
-      }
+      // Ensure we have an array of transactions
+      const transactionsArray = Array.isArray(transactions) ? transactions : [transactions];
       
-      if (response.status === 401) {
-        throw new Error('Unauthorized: Please log in again');
-      }
-      
-      if (response.status !== 200) {
-        throw new Error(`Server error: ${response.statusText}`);
-      }
-      
-      if (response.data) {
-        console.log('Setting transactions:', response.data);
-        setTransactions(Array.isArray(response.data) ? response.data : []);
-      } else {
-        console.error('Invalid response format:', response);
-        setError('Invalid response format from server');
-      }
+      console.log(`Setting ${transactionsArray.length} transactions`);
+      setTransactions(transactionsArray);
     } catch (err) {
       const errorMessage = err.response?.data?.message || err.message || 'An error occurred while fetching transactions.';
       console.error('Error in fetchTransactions:', {
@@ -74,8 +67,19 @@ export const TransactionProvider = ({ children }) => {
   }, [user]);
 
   useEffect(() => {
-    fetchTransactions();
-  }, [fetchTransactions]);
+    console.log('=== TransactionContext useEffect triggered ===');
+    console.log('Current user in effect:', user);
+    
+    // Only try to fetch if we have a user
+    if (user) {
+      setLoading(true);
+      fetchTransactions().catch(error => {
+        console.error('Error in fetchTransactions:', error);
+        setError(error.message || 'Failed to fetch transactions');
+        setLoading(false);
+      });
+    }
+  }, [fetchTransactions, user]);
 
   const addTransaction = async (transactionData) => {
     try {

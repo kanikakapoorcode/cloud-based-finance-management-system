@@ -9,6 +9,7 @@ import theme from './theme';
 // Import context providers
 import { AuthProvider } from './contexts/AuthContext';
 import { BudgetProvider } from './contexts/BudgetContext';
+import { TransactionProvider } from './contexts/TransactionContext';
 
 // Import pages
 import Homepage from './pages/Homepage';
@@ -33,6 +34,7 @@ function App() {
       >
         <AuthProvider>
           <BudgetProvider>
+            <TransactionProvider>
             <Routes>
               <Route path="/" element={<Homepage />} />
               <Route path="/auth/*" element={<AuthPage />} />
@@ -64,6 +66,7 @@ function App() {
               />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+            </TransactionProvider>
           </BudgetProvider>
         </AuthProvider>
       </SnackbarProvider>

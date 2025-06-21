@@ -1,6 +1,14 @@
-import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
+import React, { 
+  createContext, 
+  useState, 
+  useEffect, 
+  useContext, 
+  ReactNode, 
+  useCallback,
+  useMemo 
+} from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authAPI } from '../services/api';
+import authService from '../services/auth';
 import { toast } from 'react-hot-toast';
 import { AuthContextType } from '../types/auth';
 
@@ -9,19 +17,23 @@ interface AuthProviderProps {
 }
 
 // Create and export the context
-const AuthContext = createContext<AuthContextType | undefined>({
+const defaultContext: AuthContextType = {
   user: null,
   loading: true,
   error: null,
   isAuthenticated: false,
+  token: null,
   login: () => Promise.reject(new Error('Auth context not initialized')),
   signup: () => Promise.reject(new Error('Auth context not initialized')),
   logout: () => {},
   updateUser: () => {},
   clearError: () => {},
+  clearAuthData: () => {},
   isLoading: true,
   hasError: false
-});
+};
+
+const AuthContext = createContext<AuthContextType | undefined>(defaultContext);
 
 /**
  * Custom hook to access authentication context
@@ -44,6 +56,7 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
   const navigate = useNavigate();
 
   // Retry configuration
@@ -68,128 +81,292 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  // Load user from localStorage on initial load
-  useEffect(() => {
-    const loadUser = () => {
-      try {
-        const storedUser = localStorage.getItem('fms_user');
-        if (storedUser) {
-          const userData = JSON.parse(storedUser);
-          setUser(userData);
-          setIsAuthenticated(true);
-        }
-      } catch (error) {
-        console.error('Failed to load user from localStorage:', error);
-        localStorage.removeItem('fms_user');
-        localStorage.removeItem('fms_token');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadUser();
+  // Clear authentication data
+  const clearAuthData = useCallback(() => {
+    console.log('🧹 Clearing authentication data...');
+    localStorage.removeItem('fms_user');
+    localStorage.removeItem('fms_token');
+    setUser(null);
+    setToken(null);
+    setIsAuthenticated(false);
+    setError(null);
   }, []);
 
-  // Login function with enhanced error handling and retry
+  // Load user from localStorage on initial load
+  useEffect(() => {
+    let isMounted = true;
+    
+    const loadUser = async () => {
+      console.log('🔄 Starting initial auth check...');
+      
+      try {
+        console.log('🔍 Loading user from localStorage...');
+        const storedToken = localStorage.getItem('fms_token');
+        const storedUser = localStorage.getItem('fms_user');
+        
+        console.log('🔑 Stored token exists:', !!storedToken);
+        console.log('👤 Stored user exists:', !!storedUser);
+        
+        if (storedToken && storedUser) {
+          try {
+            console.log('🔄 Parsing user data...');
+            const userData = JSON.parse(storedUser);
+            
+            console.log('✅ Parsed user data:', { 
+              hasToken: !!userData.token, 
+              tokenMatch: userData.token === storedToken,
+              userId: userData._id,
+              email: userData.email
+            });
+            
+            // Verify token is present and matches
+            if (userData.token && userData.token === storedToken) {
+              console.log('🔐 Valid token found, verifying with server...');
+              
+              try {
+                // Get current user to verify token
+                const userData = await authService.getCurrentUser();
+                
+                if (isMounted) {
+                  console.log('✅ Token verified with server:', userData);
+                  
+                  // If we get here, token is valid
+                  console.log('🔓 Setting user as authenticated');
+                  setUser(userData);
+                  setToken(storedToken);
+                  setIsAuthenticated(true);
+                  
+                  console.log('✅ User authenticated:', { 
+                    id: userData._id, 
+                    email: userData.email,
+                    name: userData.name
+                  });
+                }
+              } catch (verifyError) {
+                if (isMounted) {
+                  console.error('❌ Token verification failed:', verifyError);
+                  console.log('🔄 Token is invalid or expired, clearing auth data');
+                  clearAuthData();
+                }
+              }
+            } else if (isMounted) {
+              console.warn('⚠️ Token mismatch or missing, clearing auth data');
+              clearAuthData();
+            }
+          } catch (parseError) {
+            if (isMounted) {
+              console.error('❌ Error parsing user data:', parseError);
+              clearAuthData();
+            }
+          }
+        } else if (isMounted) {
+          console.log('ℹ️ No stored user or token found');
+          setLoading(false);
+        }
+      } catch (error) {
+        if (isMounted) {
+          console.error('❌ Failed to load user from localStorage:', error);
+          clearAuthData();
+        }
+      } finally {
+        if (isMounted && loading) {
+          console.log('🏁 Finished initial auth check');
+          setLoading(false);
+        }
+      }
+    };
+    
+    loadUser();
+    
+    // Cleanup function to prevent state updates after unmount
+    return () => {
+      isMounted = false;
+    };
+  }, [loading, clearAuthData]);
+
+  // Login function with enhanced error handling and state management
   const login = async (email: string, password: string): Promise<{
     success: boolean;
     user?: any;
+    token?: string;
     error?: string;
     status?: number;
   }> => {
+    console.log('🔑 Starting login process...');
+    console.log('📧 Email:', email);
+    
+    // Reset any previous errors
+    setError(null);
+    setLoading(true);
+    
     try {
-      setLoading(true);
-      setError(null);
+      // Make the API call
+      console.log('📡 Sending login request to server...');
+      const response = await authService.login({ email, password });
       
-      console.log('Attempting login with:', { email: email.substring(0, 3) + '...' });
+      // Log response details
+      console.log('✅ Login API Response:', {
+        status: response?.status,
+        hasData: !!response?.data,
+        hasError: !!response?.data?.error
+      });
       
-      // Make the API call with retry mechanism
-      const response = await makeApiCall(() => authAPI.login({ email, password }));
+      // Handle case where response is the data directly (common with axios)
+      const responseData = response?.data || response;
       
-      // Validate response
-      if (!response || !response.data) {
-        throw new Error('No response data received from server');
+      // Log response data structure
+      console.log('🔍 Processing response data:', {
+        hasData: !!responseData,
+        hasUserData: !!(responseData?.data?.user && responseData?.data?.token),
+        dataStructure: Object.keys(responseData || {})
+      });
+      
+      if (!responseData) {
+        const errorMsg = '❌ No response data received from server';
+        console.error(errorMsg);
+        throw new Error(errorMsg);
       }
 
-      // Validate required fields in response
-      const { user, token } = response.data;
-      if (!user || !token) {
+      // Check for error in response
+      if (responseData.error) {
+        const errorMsg = `❌ Error in response: ${responseData.error}`;
+        console.error(errorMsg);
+        throw new Error(responseData.error);
+      }
+      
+      // Extract data from response (handle both nested and direct data)
+      const data = responseData.data || responseData;
+      
+      if (!data || !data.user || !data.token) {
+        const errorMsg = `❌ Invalid response format: ${JSON.stringify(responseData).substring(0, 200)}`;
+        console.error(errorMsg);
         throw new Error('Invalid response format from server');
       }
 
+      const { user, token } = data;
+      
+      // Log user data (safely)
+      console.log('👤 User data received:', { 
+        id: user?._id, 
+        email: user?.email,
+        hasToken: !!token,
+        tokenLength: token?.length || 0
+      });
+      
+      if (!token) {
+        throw new Error('No authentication token received');
+      }
+      
       // Create user object with token
       const userWithToken = { ...user, token };
       
-      // Store in localStorage with error handling
       try {
+        console.log('💾 Storing auth data in localStorage...');
+        
         // Clear any existing auth data
-        localStorage.clear(); // Clear all items to prevent conflicts
+        localStorage.removeItem('fms_user');
+        localStorage.removeItem('fms_token');
         
         // Store new auth data
         localStorage.setItem('fms_token', token);
         localStorage.setItem('fms_user', JSON.stringify(userWithToken));
         
-        // Verify token storage
+        console.log('✅ Auth data stored in localStorage');
+        
+        // Verify storage
         const storedToken = localStorage.getItem('fms_token');
         const storedUser = localStorage.getItem('fms_user');
-        const parsedUser = storedUser ? JSON.parse(storedUser) : null;
         
-        console.log('Token verification:', {
-          tokenExists: !!storedToken,
-          tokenLength: storedToken ? storedToken.length : 0,
-          userExists: !!storedUser,
-          userId: parsedUser?._id,
-          tokenMatches: storedToken === token
+        console.log('🔍 Verifying storage:', {
+          tokenStored: !!storedToken,
+          userStored: !!storedUser,
+          tokenMatch: storedToken === token,
+          userMatch: storedUser ? JSON.parse(storedUser)?.email === user?.email : false
         });
         
-        if (!storedToken || !storedUser) {
-          throw new Error('Failed to store authentication data');
+        if (!storedToken || storedToken !== token) {
+          throw new Error('Failed to store authentication token');
         }
         
-        // Verify token matches what was received
-        if (storedToken !== token) {
-          throw new Error('Token mismatch between response and storage');
-        }
+        // Update state after successful storage
+        console.log('🔄 Updating auth state...');
+        
+        // Update all state in a single batch
+        setUser(userWithToken);
+        setToken(token);
+        setIsAuthenticated(true);
+        setLoading(false);
+        
+        // Force a state update to ensure React picks up the changes
+        setTimeout(() => {
+          console.log('✅ Auth state updated, forcing re-render');
+          window.dispatchEvent(new Event('storage'));
+        }, 0);
+        
+        console.log('✅ User authenticated, preparing navigation to dashboard');
+        
+        // Navigate to dashboard
+        navigate('/dashboard', { 
+          replace: true,
+          state: { 
+            from: '/login',
+            timestamp: new Date().toISOString()
+          } 
+        });
+        
+        // Return success response
+        return {
+          success: true,
+          user: userWithToken,
+          token
+        };
+        
       } catch (storageError) {
-        console.error('Failed to store user data:', storageError);
-        throw new Error('Failed to store user data. Please try again.');
+        console.error('❌ Storage error:', storageError);
+        // Clear potentially corrupted data
+        localStorage.removeItem('fms_user');
+        localStorage.removeItem('fms_token');
+        
+        throw new Error('Failed to store authentication data');
       }
       
-      // Update state
-      setUser(userWithToken);
-      setIsAuthenticated(true);
+    } catch (error: unknown) {
+      // Handle different types of errors
+      let errorMessage = 'Login failed. Please try again.';
+      let status: number | undefined;
       
-      // Navigate to dashboard
-      navigate('/dashboard');
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        console.error('❌ Login error:', error);
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
       
-      return { 
-        success: true,
-        user: userWithToken
-      };
+      // Handle Axios error response
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response?: { status?: number; data?: any } };
+        status = axiosError.response?.status;
+        
+        if (axiosError.response?.data?.message) {
+          errorMessage = axiosError.response.data.message;
+        }
+      }
       
-    } catch (error) {
-      console.error('Login failed:', error);
-      
-      // Get error message from response
-      const errorMessage = error.response?.data?.message || 
-                         error.response?.data?.error || 
-                         error.message || 
-                         'An unexpected error occurred. Please try again.';
+      setError(errorMessage);
+      setLoading(false);
       
       // Log detailed error for debugging
       console.error('Login error details:', {
         message: errorMessage,
-        status: error.response?.status,
-        response: error.response?.data,
-        timestamp: new Date().toISOString()
+        status,
+        timestamp: new Date().toISOString(),
+        stack: error instanceof Error ? error.stack : undefined
       });
       
-      setError(errorMessage);
-      toast.error(errorMessage);
-      return { 
-        success: false, 
+      return {
+        success: false,
         error: errorMessage,
-        status: error.response?.status
+        status
       };
     } finally {
       setLoading(false);
@@ -205,19 +382,23 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setLoading(true);
       setError(null);
       
-      const response = await authAPI.signup(userData);
+      console.log('📝 Starting signup process...');
+      const response = await authService.signup(userData);
       
-      if (response && response.data) {
-        const { user: newUser, token } = response.data;
+      if (response && response.user) {
+        const { user: newUser, token } = response;
         
+        console.log('✅ Signup successful, storing user data...');
         // Store user data and token
         localStorage.setItem('fms_user', JSON.stringify(newUser));
         localStorage.setItem('fms_token', token);
         
         // Update state
         setUser(newUser);
+        setToken(token);
         setIsAuthenticated(true);
         
+        console.log('✅ User registered and authenticated, navigating to dashboard...');
         // Navigate to dashboard
         navigate('/dashboard');
         
@@ -274,22 +455,25 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, [loading]);
 
   // Context value
-  const value = {
+  const contextValue = useMemo(() => ({
     user,
     loading,
     error,
     isAuthenticated,
+    token,
     login,
     signup,
     logout,
     updateUser,
     clearError: () => setError(null),
+    clearAuthData,
+    // Alias for loading to match MUI's naming convention
     isLoading: loading,
     hasError: !!error,
-  };
+  }), [user, loading, error, isAuthenticated, token, login, signup, logout, updateUser, clearAuthData]);
 
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

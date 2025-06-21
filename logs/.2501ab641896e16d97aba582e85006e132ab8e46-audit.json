@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "D:\\final-cloud-fms\\cloud-based-finance-management-system\\logs\\.2501ab641896e16d97aba582e85006e132ab8e46-audit.json",
+    "files": [
+        {
+            "date": 1750539531810,
+            "name": "D:\\final-cloud-fms\\cloud-based-finance-management-system\\logs\\error-2025-06-22.log",
+            "hash": "573a420bec726c330d65de77780ba71a686c29d21c62038874a06dda8449a950"
+        }
+    ],
+    "hashType": "sha256"
+}

@@ -2,24 +2,44 @@
   "transactions": [],
   "users": [
     {
-      "name": "Kanika kapoor",
-      "email": "sheetalkapoor009@gmail.com",
-      "password": "$2a$10$VXcj2NhQJ8Mut7XVRxGqq.cr43TabX/tPIX9244.bOCjj6C7s9dwK",
+      "_id": "6f14e3cf-acc7-495d-a2fc-8db1772ba973",
+      "name": "Test User",
+      "email": "test@example.com",
+      "password": "$2a$10$B1S9aVUnaRIvT//AM/2NDuNjTAx73tNtGP5huh5dpgWAPrytK62Ti",
       "role": "user",
-      "_id": "268603ba-ad34-4344-ab06-c9d35c3cfc58",
       "isActive": true,
-      "createdAt": "2025-06-19T12:24:21.469Z",
-      "updatedAt": "2025-06-19T12:24:21.470Z"
+      "createdAt": "2025-06-21T18:55:02.193Z",
+      "updatedAt": "2025-06-21T18:55:02.213Z"
     },
     {
-      "name": "Kanika Kapoor",
-      "email": "kanikakr823@gmail.com",
-      "password": "$2a$10$ul4khhDVLwjMY3WoAGZqV.xcfrxzH06Y3qXJ.ECEZKfcYgfh4g20W",
-      "role": "user",
-      "_id": "5b1b87fe-5359-403d-a782-adfea3c2dcbd",
+      "_id": "893f2dc3-aa5f-4701-a57c-bd97ca70a7ec",
+      "name": "Admin User",
+      "email": "admin@example.com",
+      "password": "$2a$10$9IqfyAL5aQHBotGQtKBtIOnFd/bn6yiEdQTLOfIcNhd4Vg60byPYe",
+      "role": "admin",
       "isActive": true,
-      "createdAt": "2025-06-19T18:22:07.430Z",
-      "updatedAt": "2025-06-19T18:22:07.431Z"
+      "createdAt": "2025-06-21T18:55:02.301Z",
+      "updatedAt": "2025-06-21T18:55:02.301Z"
+    },
+    {
+      "name": "Kanika kapoor",
+      "email": "kanikakapoor.23022953@gehu.ac.in",
+      "password": "$2a$10$DQKZOUOIRZmxZLFcE03UYuYRmAx4i3cljtozU/EwUS23g1ecarfHi",
+      "role": "user",
+      "_id": "26df3513-14ff-485e-b81a-6b3cd0564cfb",
+      "isActive": true,
+      "createdAt": "2025-06-21T18:58:07.239Z",
+      "updatedAt": "2025-06-21T18:58:07.240Z"
+    },
+    {
+      "name": "Kanika kapoor",
+      "email": "kanikakr823@gmail.com",
+      "password": "$2a$10$s9k81tIGI0n0mzJwwo9XN.0r5eB16qJO6lJ8v9S0JPiceDlb.2nMW",
+      "role": "user",
+      "_id": "77317136-9848-4c39-84ed-60ce4f3d0a55",
+      "isActive": true,
+      "createdAt": "2025-06-21T20:31:28.781Z",
+      "updatedAt": "2025-06-21T20:31:28.784Z"
     }
   ],
   "categories": [

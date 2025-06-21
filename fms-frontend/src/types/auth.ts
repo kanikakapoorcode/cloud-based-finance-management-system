@@ -3,19 +3,23 @@ export type AuthContextType = {
   loading: boolean;
   error: string | null;
   isAuthenticated: boolean;
+  token: string | null;
   login: (email: string, password: string) => Promise<{ 
     success: boolean; 
-    user?: any; 
+    user?: any;
+    token?: string;
     error?: string; 
-    status?: number 
+    status?: number;
   }>;
   signup: (userData: any) => Promise<{ 
     success: boolean; 
-    error?: string 
+    error?: string;
+    status?: number;
   }>;
   logout: () => void;
   updateUser: (userData: Partial<any>) => void;
   clearError: () => void;
+  clearAuthData: () => void;
   isLoading: boolean;
   hasError: boolean;
 };

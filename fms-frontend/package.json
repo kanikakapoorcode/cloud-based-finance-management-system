@@ -10,11 +10,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@emotion/react": "^11.11.0",
-    "@emotion/styled": "^11.11.0",
-    "@mui/icons-material": "^5.14.0",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@mui/icons-material": "^5.17.1",
     "@mui/lab": "^5.0.0-alpha.166",
-    "@mui/material": "^5.14.0",
+    "@mui/material": "^5.17.1",
     "@mui/x-date-pickers": "^6.20.2",
     "axios": "^1.6.0",
     "chart.js": "^4.5.0",

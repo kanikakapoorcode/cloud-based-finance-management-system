@@ -51,12 +51,18 @@ const AddTransaction = () => {
   const [loading, setLoading] = useState(true);
   const [categoriesError, setCategoriesError] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
-  const [formData, setFormData] = useState({
-    description: '',
-    amount: '',
-    date: new Date().toISOString().split('T')[0],
-    category: ''
+  const [formData, setFormData] = useState(() => {
+    // Initialize with default values including a valid date
+    return {
+      description: '',
+      amount: '',
+      date: new Date().toISOString().split('T')[0],
+      category: '', // Will be set after categories are loaded
+    };
   });
+  
+  // Track if we've set the initial category
+  const [hasSetInitialCategory, setHasSetInitialCategory] = useState(false);
 
   const { enqueueSnackbar } = useSnackbar();
   
@@ -231,17 +237,110 @@ const AddTransaction = () => {
     fetchCategories();
   }, [isAuthenticated, authLoading, navigate, enqueueSnackbar]);
 
-  // Initialize form data with first category
+  // Process and normalize categories when they are loaded
+  const processedCategories = React.useMemo(() => {
+    if (!Array.isArray(categories) || categories.length === 0) {
+      // Return default categories if none are loaded
+      return [
+        { _id: '1', name: 'Food & Dining', type: 'expense' },
+        { _id: '2', name: 'Shopping', type: 'expense' },
+        { _id: '3', name: 'Transportation', type: 'expense' },
+        { _id: '4', name: 'Bills & Utilities', type: 'expense' },
+        { _id: '5', name: 'Salary', type: 'income' },
+        { _id: '6', name: 'Freelance', type: 'income' },
+      ];
+    }
+
+    return categories.map(cat => ({
+      _id: String(cat._id || '').trim(),
+      name: String(cat.name || 'Uncategorized').trim(),
+      type: String(cat.type || 'expense').toLowerCase().trim(),
+    }));
+  }, [categories]);
+  
+  // Track if we're ready to render the Select component
+  const [isSelectReady, setIsSelectReady] = useState(false);
+
+  // Filter categories based on transaction type
+  const filteredCategories = React.useMemo(() => {
+    console.log('Filtering categories. isIncome:', isIncome);
+    if (!Array.isArray(processedCategories)) {
+      console.log('No processed categories available');
+      return [];
+    }
+    
+    const targetType = isIncome ? 'income' : 'expense';
+    const filtered = processedCategories.filter(cat => {
+      if (!cat) return false;
+      const catType = String(cat.type || '').toLowerCase().trim();
+      const matches = catType === targetType || catType === 'both';
+      console.log(`Category ${cat._id} (${cat.name}) type: ${catType}, matches: ${matches}`);
+      return matches;
+    });
+    
+    console.log('Filtered categories:', filtered);
+    return filtered;
+  }, [processedCategories, isIncome]);
+
+  // Set default category when filtered categories change
   useEffect(() => {
-    if (initialLoad && categories.length > 0 && !formData.category) {
-      const defaultCategory = categories.find(cat => cat.type === 'expense') || categories[0];
+    console.log('=== Category Selection Debug ===');
+    console.log('Current form category:', formData.category);
+    console.log('Has set initial category:', hasSetInitialCategory);
+    console.log('Filtered categories count:', filteredCategories.length);
+    
+    // Mark Select as not ready while we're updating
+    setIsSelectReady(false);
+    
+    if (filteredCategories.length > 0) {
+      console.log('First filtered category:', filteredCategories[0]);
+      
+      // Only set the initial category once when categories are first loaded
+      if (!hasSetInitialCategory) {
+        const newCategory = String(filteredCategories[0]?._id || '');
+        console.log('Setting initial category:', newCategory);
+        setFormData(prev => ({
+          ...prev,
+          category: newCategory
+        }));
+        setHasSetInitialCategory(true);
+      } else {
+        // If we already set an initial category, validate the current one
+        const currentCategory = String(formData.category || '');
+        const categoryExists = filteredCategories.some(
+          cat => String(cat._id) === currentCategory
+        );
+        
+        console.log('Validating current category. Exists:', categoryExists);
+        
+        if (!categoryExists && filteredCategories[0]) {
+          const newCategory = String(filteredCategories[0]._id);
+          console.log('Setting new default category:', newCategory);
+          setFormData(prev => ({
+            ...prev,
+            category: newCategory
+          }));
+        }
+      }
+    } else if (formData.category) {
+      // If no categories available but we have a category selected, clear it
+      console.log('No categories available, clearing selection');
       setFormData(prev => ({
         ...prev,
-        category: defaultCategory._id
+        category: ''
       }));
-      setInitialLoad(false);
     }
-  }, [initialLoad, categories, formData.category]);
+    
+    // Mark Select as ready after state updates
+    const timer = setTimeout(() => {
+      setIsSelectReady(true);
+      console.log('Select component is now ready');
+    }, 0);
+    
+    console.log('=== End Category Selection Debug ===');
+    
+    return () => clearTimeout(timer);
+  }, [filteredCategories, formData.category, hasSetInitialCategory]);
   
   // Show loading state while checking auth
   if (authLoading) {
@@ -272,84 +371,7 @@ const AddTransaction = () => {
     console.log('API URL:', `${import.meta.env.VITE_API_URL}/categories`);
   }, [categories, formData]);
 
-  // Process and normalize categories when they are loaded
-  const processedCategories = React.useMemo(() => {
-    console.log('=== PROCESSING CATEGORIES ===');
-    console.log('Raw categories received:', categories);
-    
-    if (!Array.isArray(categories)) {
-      console.error('Categories is not an array:', categories);
-      return [];
-    }
-    
-    const processed = categories
-      .filter(cat => {
-        const isValid = cat && typeof cat === 'object';
-        if (!isValid) {
-          console.warn('Invalid category object:', cat);
-        }
-        return isValid;
-      })
-      .map(cat => ({
-        _id: String(cat._id || cat.id || '').trim(),
-        name: String(cat.name || 'Uncategorized').trim(),
-        type: String(cat.type || 'expense').toLowerCase().trim(),
-        isDefault: Boolean(cat.isDefault)
-      }))
-      .filter(cat => {
-        const hasId = !!cat._id;
-        if (!hasId) {
-          console.warn('Category missing _id:', cat);
-        }
-        return hasId;
-      });
-      
-    console.log('Processed categories:', processed);
-    return processed;
-  }, [categories]);
 
-  // Filter categories based on transaction type
-  const filteredCategories = React.useMemo(() => {
-    console.log('=== FILTERING CATEGORIES ===');
-    console.log('Transaction type:', isIncome ? 'Income' : 'Expense');
-    
-    try {
-      if (!Array.isArray(categories)) {
-        console.error('Categories is not an array');
-        return [];
-      }
-
-      console.log('Categories count:', categories.length);
-      
-      const filtered = categories.filter(cat => {
-        if (!cat) return false;
-        
-        const catType = String(cat.type || '').toLowerCase().trim();
-        
-        if (isIncome) {
-          return catType === 'income' || catType === 'both';
-        } else {
-          return catType === 'expense' || catType === 'both';
-        }
-      });
-      
-      console.log(`Filtered ${filtered.length} categories for ${isIncome ? 'income' : 'expense'}`);
-      console.log('Filtered categories:', filtered);
-      
-      return filtered;
-      
-    } catch (error) {
-      console.error('Error filtering categories:', error);
-      console.error('Error details:', {
-        errorMessage: error.message,
-        errorStack: error.stack,
-        categoriesType: typeof categories,
-        categoriesLength: categories ? categories.length : 0,
-        isIncome: isIncome
-      });
-      return [];
-    }
-  }, [categories, isIncome]);
   
   // Debug log for categories and form data
   useEffect(() => {
@@ -409,12 +431,15 @@ const AddTransaction = () => {
   const handleIncomeToggle = () => {
     const newIsIncome = !isIncome;
     setIsIncome(newIsIncome);
-    // Reset category when switching between income and expense
-    // The useEffect will set a default category from filteredCategories
+    
+    // Reset form data but keep the amount and description
     setFormData(prev => ({
       ...prev,
-      category: ''
+      category: '' // This will trigger the default category selection
     }));
+    
+    // Reset the initial category flag to force reselection
+    setHasSetInitialCategory(false);
   };
 
   const handleSubmit = async (e) => {
@@ -691,89 +716,98 @@ const AddTransaction = () => {
             <Grid item xs={12}>
               <FormControl fullWidth>
                 <InputLabel id="category-select-label">Category</InputLabel>
-                <Select
-                  labelId="category-select-label"
-                  id={inputIds.category}
-                  name="category"
-                  value={formData.category || ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    console.log('Selected category:', value);
-                    setFormData(prev => ({ ...prev, category: value }));
-                  }}
-                  disabled={loading || filteredCategories.length === 0}
-                  inputProps={{ 
-                    'aria-label': 'Transaction category',
-                    'data-testid': 'category-select'
-                  }}
-                >
-                  {loading ? (
-                    <MenuItem value="" disabled>
-                      <CircularProgress size={20} />
-                      <span style={{ marginLeft: 8 }}>Loading categories...</span>
-                    </MenuItem>
-                  ) : filteredCategories.length === 0 ? (
-                    <MenuItem value="" disabled>
-                      <em>No {isIncome ? 'income' : 'expense'} categories found</em>
-                    </MenuItem>
-                  ) : (
-                    <>
-                      <MenuItem value="">
-                        <em>Select a category</em>
-                      </MenuItem>
-                      {filteredCategories.map((category) => (
-                        <MenuItem 
-                          key={category._id} 
-                          value={category._id}
-                          data-testid={`category-option-${category._id}`}
-                        >
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <span>{category.name}</span>
-                            <Chip 
-                              label={category.type} 
-                              size="small" 
-                              color={category.type === 'income' ? 'success' : 'error'}
-                            />
-                          </Box>
-                        </MenuItem>
-                      ))}
-                    </>
-                  )}  
-                </Select>
                 {loading ? (
-                  <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <CircularProgress size={20} />
-                    <Typography variant="caption" color="text.secondary">
+                  <Box sx={{ p: 2, textAlign: 'center' }}>
+                    <CircularProgress size={24} />
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
                       Loading categories...
                     </Typography>
                   </Box>
-                ) : filteredCategories.length === 0 ? (
-                  <Box sx={{ mt: 1 }}>
-                    <FormHelperText error>
-                      No {isIncome ? 'income' : 'expense'} categories found.
-                    </FormHelperText>
-                    <Button 
-                      variant="text" 
-                      size="small" 
-                      sx={{ 
-                        mt: 1, 
-                        ml: 0.5, 
-                        textTransform: 'none', 
-                        color: 'primary.main',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 0.5
-                      }}
-                      onClick={() => navigate('/dashboard/categories')}
-                      startIcon={<span>➕</span>}
-                    >
-                      Add Categories
-                    </Button>
-                  </Box>
                 ) : (
-                  <FormHelperText>
-                    Select a category for this {isIncome ? 'income' : 'expense'}
-                  </FormHelperText>
+                  <>
+                    <Select
+                      labelId="category-select-label"
+                      id={inputIds.category}
+                      name="category"
+                      value={formData.category || ''}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        console.log('Selected category:', value);
+                        setFormData(prev => ({
+                          ...prev,
+                          category: value
+                        }));
+                      }}
+                      disabled={filteredCategories.length === 0}
+                      displayEmpty
+                      renderValue={(selected) => {
+                        if (!selected) return <em>Select a category</em>;
+                        const selectedCategory = filteredCategories.find(cat => String(cat._id) === String(selected));
+                        return selectedCategory ? selectedCategory.name : <em>Invalid selection</em>;
+                      }}
+                      inputProps={{ 
+                        'aria-label': 'Transaction category',
+                        'data-testid': 'category-select'
+                      }}
+                    >
+                      {filteredCategories.length === 0 ? (
+                        <MenuItem value="" disabled>
+                          <em>No {isIncome ? 'income' : 'expense'} categories found</em>
+                        </MenuItem>
+                      ) : (
+                        <>
+                          <MenuItem value="">
+                            <em>Select a category</em>
+                          </MenuItem>
+                          {filteredCategories.map((category) => (
+                            <MenuItem 
+                              key={category._id} 
+                              value={category._id}
+                              data-testid={`category-option-${category._id}`}
+                            >
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <span>{category.name}</span>
+                                <Chip 
+                                  label={category.type} 
+                                  size="small" 
+                                  color={category.type === 'income' ? 'success' : 'error'}
+                                />
+                              </Box>
+                            </MenuItem>
+                          ))}
+                        </>
+                      )}
+                    </Select>
+                    
+                    {filteredCategories.length === 0 ? (
+                      <Box sx={{ mt: 1 }}>
+                        <FormHelperText error>
+                          No {isIncome ? 'income' : 'expense'} categories found.
+                        </FormHelperText>
+                        <Button 
+                          variant="text" 
+                          size="small" 
+                          sx={{ 
+                            mt: 1, 
+                            ml: 0.5, 
+                            textTransform: 'none', 
+                            color: 'primary.main',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 0.5
+                          }}
+                          onClick={() => navigate('/dashboard/categories')}
+                          startIcon={<span>➕</span>}
+                        >
+                          Add Categories
+                        </Button>
+                      </Box>
+                    ) : (
+                      <FormHelperText>
+                        Select a category for this {isIncome ? 'income' : 'expense'}
+                      </FormHelperText>
+                    )}
+                  </>
                 )}
               </FormControl>
             </Grid>

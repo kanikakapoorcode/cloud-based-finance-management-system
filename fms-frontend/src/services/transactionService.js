@@ -3,20 +3,11 @@ import { transactionAPI } from './api';
 
 /**
  * Fetches all transactions for the logged-in user.
- * The user ID is retrieved from the auth token by the API interceptor.
+ * @param {string} userId - The ID of the user to fetch transactions for
+ * @returns {Promise<Array>} - Array of transaction objects
  */
 export const getTransactions = async (userId) => {
   console.log('[TransactionService] Fetching transactions for user:', userId);
-  
-  // Check for token first
-  const token = localStorage.getItem('fms_token') || 
-                JSON.parse(localStorage.getItem('fms_user') || '{}')?.token;
-  
-  if (!token) {
-    const error = new Error('Authentication required. Please log in again.');
-    console.error('[TransactionService] No authentication token found');
-    throw error;
-  }
   
   if (!userId) {
     const error = new Error('User ID is required to fetch transactions');
@@ -25,9 +16,26 @@ export const getTransactions = async (userId) => {
   }
 
   try {
+    console.log('[TransactionService] Sending request to fetch transactions');
     const response = await transactionAPI.getAll(userId);
-    console.log('[TransactionService] Transactions fetched successfully');
-    return response.data || response; // Handle both response formats
+    console.log('[TransactionService] API Response:', response);
+    
+    // The API response structure might be different than expected
+    // Let's handle different possible response structures
+    if (response && response.data) {
+      // If response has a data property, use that
+      return Array.isArray(response.data) ? response.data : [response.data];
+    } else if (Array.isArray(response)) {
+      // If response is already an array, return it directly
+      return response;
+    } else if (response) {
+      // If response is a single object, wrap it in an array
+      return [response];
+    }
+    
+    // If we get here, the response format is unexpected
+    console.error('[TransactionService] Unexpected response format:', response);
+    return [];
   } catch (error) {
     console.error('[TransactionService] Error fetching transactions:', {
       message: error.message,

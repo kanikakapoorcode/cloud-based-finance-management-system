@@ -1,68 +1,75 @@
 // src/services/api.js
 import axios from 'axios';
 
+// Determine the base URL based on the environment
+const getBaseUrl = () => {
+  // In development, use the full URL including /api/v1
+  if (import.meta.env.DEV) {
+    return 'http://localhost:5001/api/v1';
+  }
+  // In production, use the environment variable or default to relative path with /api/v1
+  return (import.meta.env.VITE_API_URL || '') + '/api/v1';
+};
+
 const API = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5001/api/v1',
+  baseURL: getBaseUrl(),
   withCredentials: true,
+  timeout: 10000, // 10 second timeout
   headers: {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
   },
 });
+
+// Log API configuration on startup
+console.log('API Base URL:', API.defaults.baseURL);
+console.log('Environment:', import.meta.env.MODE);
 
 // Request interceptor for token injection
 API.interceptors.request.use(
   (config) => {
+    // Skip auth for public endpoints
+    const publicEndpoints = ['/auth/', '/public/'];
+    const isPublic = publicEndpoints.some(endpoint => config.url.includes(endpoint));
+    
+    if (isPublic) {
+      console.log('Skipping auth for public endpoint:', config.url);
+      return config;
+    }
+
     try {
       // Get token from localStorage
-      const token = localStorage.getItem('fms_token');
+      let token = localStorage.getItem('fms_token');
       
-      // Get user data
-      const user = JSON.parse(localStorage.getItem('fms_user') || '{}');
-      
-      console.log('=== API REQUEST INTERCEPTOR ===');
-      console.log('Request URL:', config.url);
-      console.log('Method:', config.method);
-      console.log('Headers:', config.headers);
-      console.log('Data:', config.data);
-      console.log('Token from localStorage:', !!token);
-      console.log('Token length:', token ? token.length : 0);
-      console.log('User data:', user);
-      
-      // Skip auth for public endpoints
-      const publicEndpoints = ['/auth/', '/public/'];
-      const isPublic = publicEndpoints.some(endpoint => config.url.includes(endpoint));
-      
-      if (isPublic) {
-        console.log('Skipping auth for public endpoint');
-        return config;
+      // If no token in fms_token, try to get it from fms_user
+      if (!token) {
+        try {
+          const userStr = localStorage.getItem('fms_user');
+          if (userStr) {
+            const user = JSON.parse(userStr);
+            token = user?.token;
+          }
+        } catch (e) {
+          console.error('Error parsing user data from localStorage:', e);
+        }
       }
-
-      // If we have a token from localStorage, use it
+      
+      console.log('=== API REQUEST ===');
+      console.log('URL:', config.url);
+      console.log('Method:', config.method);
+      console.log('Has token:', !!token);
+      console.log('Token length:', token ? token.length : 0);
+      
+      // If we have a token, add it to the request
       if (token) {
         config.headers = config.headers || {};
         config.headers.Authorization = `Bearer ${token}`;
-        console.log('Added Authorization header with token from localStorage');
-        return config;
+        console.log('Added Authorization header');
+      } else {
+        console.warn('No auth token available for protected endpoint');
       }
       
-      // If no token found, check if we have user data with token
-      if (user && user.token) {
-        config.headers = config.headers || {};
-        config.headers.Authorization = `Bearer ${user.token}`;
-        console.log('Added Authorization header with token from user data');
-        return config;
-      }
-      
-      // If no token found, reject the request
-      console.warn('No valid authentication token found');
-      return Promise.reject({
-        response: {
-          status: 401,
-          data: { message: 'Authentication required' }
-        },
-        isAxiosError: true,
-        config
-      });
+      return config;
     } catch (error) {
       console.error('Error in request interceptor:', error);
       return Promise.reject(error);
@@ -88,14 +95,12 @@ API.interceptors.response.use(
         localStorage.removeItem('fms_token');
         localStorage.removeItem('fms_user');
         
-        // Show error message
-        enqueueSnackbar('Session expired. Please log in again.', {
-          variant: 'error',
-          autoHideDuration: 5000
-        });
-        
+        // Show error message using toast
+        console.error('Session expired. Please log in again.');
         // Redirect to login
-        navigate('/auth/login');
+        if (typeof window !== 'undefined') {
+          window.location.href = '/auth/login';
+        }
         
         return Promise.reject(error);
       }
@@ -239,18 +244,86 @@ API.interceptors.response.use(
 export const authAPI = {
   login: async (data) => {
     try {
-      console.log('Sending login request with data:', data);
-      const response = await API.post('/auth/login', data);
-      console.log('Raw login response:', response);
+      console.log('🔐 Sending login request to:', API.defaults.baseURL + '/auth/login');
+      console.log('📤 Request data:', { 
+        email: data.email, 
+        hasPassword: !!data.password
+      });
+      
+      const response = await API.post('/auth/login', data, {
+        // Ensure we get the full response for auth endpoints
+        transformResponse: (res) => res
+      });
+      
+      console.log('✅ Login response received:', {
+        url: response.config?.url,
+        status: response.status,
+        hasData: !!response.data,
+        dataKeys: response.data ? Object.keys(response.data) : 'no data'
+      });
+      
+      // Log the response data structure for debugging
+      console.log('🔍 Response data structure:', {
+        url: response.config?.url,
+        status: response.status,
+        hasData: !!response.data,
+        isString: typeof response.data === 'string',
+        dataType: response.data ? typeof response.data : 'null',
+        dataKeys: response.data && typeof response.data === 'object' ? Object.keys(response.data) : 'not an object'
+      });
+      
+      // Parse JSON if the response is a string
+      try {
+        if (typeof response.data === 'string') {
+          response.data = JSON.parse(response.data);
+        }
+        
+        // Log the parsed response data for debugging
+        console.log('🔍 Response data structure:', {
+          hasData: !!response.data,
+          isString: typeof response.data === 'string',
+          dataType: response.data ? typeof response.data : 'null',
+          dataKeys: response.data && typeof response.data === 'object' ? Object.keys(response.data) : 'not an object'
+        });
+      } catch (e) {
+        console.error('❌ Error parsing response data:', e);
+      }
+      
       return response;
     } catch (error) {
-      console.error('Login API error:', error.response || error);
+      console.error('❌ Login request failed:', {
+        message: error.message,
+        status: error.response?.status,
+        response: error.response?.data
+      });
       throw error;
     }
   },
   signup: (data) => API.post('/auth/signup', data),
   verifyOtp: (data) => API.post('/auth/verify-otp', data),
-  refreshToken: (refreshToken) => API.post('/auth/refresh-token', { refreshToken })
+  refreshToken: (refreshToken) => {
+    console.log('🔄 Refreshing token...');
+    return API.post('/auth/refresh-token', { refreshToken });
+  },
+  verifyToken: async (token) => {
+    console.log('🔒 Verifying token...');
+    try {
+      const response = await API.get('/auth/verify-token', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      console.log('✅ Token verification successful');
+      return response;
+    } catch (error) {
+      console.error('❌ Token verification failed:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
+      throw error;
+    }
+  }
 };
 
 // Transaction API methods

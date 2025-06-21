@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, Suspense, useEffect } from 'react';
 import { 
   Box, 
   Typography, 
@@ -18,17 +18,21 @@ import {
   Fade,
   CircularProgress
 } from '@mui/material';
-import { useTheme, alpha } from '@mui/material/styles';
+import { useTheme } from '@mui/material/styles';
+import BudgetSavingsGraphs from '../components/Dashboard/BudgetSavingsGraphs';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useTransactions } from '../contexts/TransactionContext';
+import { useAuth } from '../hooks/useAuth';
+import { useBudget } from '../contexts/BudgetContext';
 import { formatCurrency } from '../utils/formatCurrency';
 import { 
   AccountBalance as AccountBalanceIcon,
   ArrowUpward as ArrowUpwardIcon,
   ArrowDownward as ArrowDownwardIcon,
   Refresh as RefreshIcon,
-  Info as InfoIcon
+  Info as InfoIcon,
+  Add as AddIcon
 } from '@mui/icons-material';
 import CountUp from 'react-countup';
 import { Line } from 'react-chartjs-2';
@@ -301,30 +305,117 @@ const generateChartData = (transactions) => {
 const DashboardHome = () => {
   const theme = useTheme();
   const navigate = useNavigate();
-  const { transactions, loading, error, refreshTransactions } = useTransactions();
+  const { transactions = [], loading, error, refreshTransactions } = useTransactions();
+  const { user } = useAuth();
+  const { budgetData } = useBudget();
   const [isRefreshing, setIsRefreshing] = useState(false);
-
+  const [localLoading, setLocalLoading] = useState(true);
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('=== Dashboard Debug ===');
+    console.log('User:', user);
+    console.log('Transactions:', transactions);
+    console.log('Loading:', loading);
+    console.log('Error:', error);
+    console.log('Transactions length:', transactions?.length || 0);
+    console.log('Is authenticated:', !!user);
+    console.log('========================');
+    
+    // Set local loading state based on context loading and user authentication
+    if (user) {
+      setLocalLoading(loading);
+    } else {
+      setLocalLoading(true);
+    }
+  }, [user, transactions, loading, error]);
+  
   // Handle refresh
   const handleRefresh = async () => {
+    if (isRefreshing) return; // Prevent multiple simultaneous refreshes
+    
     try {
       setIsRefreshing(true);
+      setLocalLoading(true);
       await refreshTransactions();
     } catch (err) {
       console.error('Error refreshing transactions:', err);
     } finally {
       setIsRefreshing(false);
+      setLocalLoading(false);
     }
   };
+  
+  // Show loading state
+  if (localLoading) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        minHeight: '60vh',
+        flexDirection: 'column',
+        gap: 2
+      }}>
+        <CircularProgress />
+        <Typography variant="body1" color="text.secondary">
+          Loading your financial data...
+        </Typography>
+      </Box>
+    );
+  }
+  
+  // Show error state
+  if (error) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        minHeight: '60vh',
+        flexDirection: 'column',
+        gap: 2,
+        p: 3
+      }}>
+        <Alert 
+          severity="error" 
+          sx={{ mb: 2, maxWidth: 600, width: '100%' }}
+          action={
+            <Button 
+              color="inherit" 
+              size="small" 
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              startIcon={isRefreshing ? <CircularProgress size={20} /> : <RefreshIcon />}
+            >
+              {isRefreshing ? 'Refreshing...' : 'Retry'}
+            </Button>
+          }
+        >
+          <AlertTitle>Error Loading Data</AlertTitle>
+          {typeof error === 'string' ? error : 'Failed to load transactions. Please try again.'}
+        </Alert>
+        <Button 
+          variant="outlined" 
+          onClick={() => navigate('/transactions')}
+          startIcon={<AccountBalanceIcon />}
+        >
+          Go to Transactions
+        </Button>
+      </Box>
+    );
+  }
 
   // Calculate totals
-  const { totalBalance, monthlyIncome, monthlyExpenses, recentTransactions } = useMemo(() => {
+  const { totalBalance, monthlyIncome, monthlyExpenses, recentTransactions, hasTransactions } = useMemo(() => {
     try {
       if (!Array.isArray(transactions) || transactions.length === 0) {
         return { 
           totalBalance: 0, 
           monthlyIncome: 0, 
           monthlyExpenses: 0,
-          recentTransactions: []
+          recentTransactions: [],
+          hasTransactions: false
         };
       }
 
@@ -373,7 +464,8 @@ const DashboardHome = () => {
         totalBalance: 0, 
         monthlyIncome: 0, 
         monthlyExpenses: 0,
-        recentTransactions: []
+        recentTransactions: [],
+        hasTransactions: transactions.length > 0
       });
 
       // Sort recent transactions by date (newest first)
@@ -391,7 +483,9 @@ const DashboardHome = () => {
     }
   }, [transactions]);
 
-  if (loading) {
+  // Show loading state if either transactions are loading or user is not yet authenticated
+  if (loading || (!user && !error)) {
+    console.log('Showing loading state - loading:', loading, 'user:', user);
     return (
       <Box>
         <Typography variant="h4" component="h1" gutterBottom>
@@ -413,7 +507,9 @@ const DashboardHome = () => {
     );
   }
 
+  // Show error if there's an error (only if we have a user or a specific error)
   if (error) {
+    console.log('Showing error state - error:', error, 'user:', user);
     return (
       <Box>
         <Typography variant="h4" component="h1" gutterBottom>
@@ -454,6 +550,54 @@ const DashboardHome = () => {
             </Button>
           </Box>
         </Alert>
+      </Box>
+    );
+  }
+
+  // Show empty state if no transactions
+  if (!hasTransactions) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        minHeight: '60vh',
+        textAlign: 'center',
+        p: 3
+      }}>
+        <AccountBalanceIcon 
+          sx={{ 
+            fontSize: 80, 
+            color: 'text.secondary',
+            mb: 2,
+            opacity: 0.7
+          }} 
+        />
+        <Typography variant="h5" gutterBottom>
+          Welcome to Your Dashboard
+        </Typography>
+        <Typography variant="body1" color="text.secondary" paragraph>
+          It looks like you don't have any transactions yet.
+        </Typography>
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={() => navigate('/transactions/new')}
+          startIcon={<AddIcon />}
+          sx={{ mt: 2 }}
+        >
+          Add Your First Transaction
+        </Button>
+        <Button
+          variant="outlined"
+          onClick={handleRefresh}
+          startIcon={<RefreshIcon />}
+          disabled={isRefreshing}
+          sx={{ mt: 2 }}
+        >
+          {isRefreshing ? 'Refreshing...' : 'Refresh'}
+        </Button>
       </Box>
     );
   }
@@ -629,6 +773,14 @@ const DashboardHome = () => {
           </Paper>
         </Grid>
       </Grid>
+
+      {/* Budget and Savings Graphs */}
+      <Suspense fallback={<div>Loading charts...</div>}>
+        <BudgetSavingsGraphs 
+          budgetData={budgetData} 
+          transactions={transactions} 
+        />
+      </Suspense>
     </Box>
   );
 };
