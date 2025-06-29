@@ -6,20 +6,79 @@ const db = require('../services/db');
 // @route   GET /api/v1/transactions
 // @access  Private
 exports.getTransactions = asyncHandler(async (req, res, next) => {
-  // Get transactions for the current user
-  const transactions = await db.getTransactions(req.user.id);
-  
-  // Filter by type if provided
-  const type = req.query.type;
-  const filteredTransactions = type 
-    ? transactions.filter(t => t.type === type)
-    : transactions;
+  try {
+    console.group('🔍 getTransactions');
+    console.log('👤 User ID:', req.user?.id);
+    
+    if (!req.user?.id) {
+      const error = new Error('User not authenticated');
+      error.statusCode = 401;
+      throw error;
+    }
+    
+    // Get transactions for the current user
+    console.log('📡 Fetching transactions from database...');
+    const transactions = await db.getTransactions(req.user.id);
+    console.log(`📊 Found ${transactions.length} raw transactions`);
+    
+    // Filter by type if provided
+    const { type } = req.query;
+    const filteredTransactions = type 
+      ? transactions.filter(t => t.type?.toLowerCase() === type.toLowerCase())
+      : transactions;
+    
+    console.log(`🔍 After filtering by type '${type}': ${filteredTransactions.length} transactions`);
 
-  res.status(200).json({
-    success: true,
-    count: filteredTransactions.length,
-    data: filteredTransactions
-  });
+    // Transform data to match frontend expectations
+    const formattedTransactions = filteredTransactions.map(transaction => {
+      // Ensure we have a valid date
+      const transactionDate = transaction.date || transaction.createdAt || new Date();
+      
+      return {
+        _id: transaction._id,
+        amount: parseFloat(transaction.amount) || 0,
+        type: transaction.type || 'expense', // Default to expense if not specified
+        description: transaction.description?.toString() || '',
+        date: new Date(transactionDate).toISOString(),
+        category: transaction.category || 'uncategorized',
+        user: transaction.user,
+        paymentMethod: transaction.paymentMethod || 'cash',
+        isRecurring: Boolean(transaction.isRecurring),
+        createdAt: new Date(transaction.createdAt || new Date()).toISOString(),
+        updatedAt: new Date(transaction.updatedAt || new Date()).toISOString(),
+        // Include raw data for debugging
+        _raw: process.env.NODE_ENV === 'development' ? transaction : undefined
+      };
+    });
+
+    // Sort by date (newest first)
+    formattedTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    const response = {
+      success: true,
+      count: formattedTransactions.length,
+      data: formattedTransactions
+    };
+    
+    console.log(`✅ Successfully returning ${formattedTransactions.length} transactions`);
+    console.groupEnd();
+    
+    return res.status(200).json(response);
+  } catch (error) {
+    console.error('❌ Error in getTransactions:', {
+      error: error.message,
+      stack: error.stack,
+      user: req.user?.id,
+      query: req.query
+    });
+    
+    // Send error response
+    res.status(error.statusCode || 500).json({
+      success: false,
+      error: error.message || 'Server Error',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
 });
 
 // @desc    Get single transaction

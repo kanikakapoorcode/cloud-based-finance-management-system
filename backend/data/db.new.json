@@ -1,0 +1,58 @@
+{
+  "transactions": [],
+  "users": [
+    {
+      "_id": "test_user_123",
+      "name": "Test User",
+      "email": "test@example.com",
+      "password": "$2a$10$B1S9aVUnaRIvT//AM/2NDuNjTAx73tNtGP5huh5dpgWAPrytb.2nMW",
+      "role": "user",
+      "isActive": true,
+      "isVerified": true,
+      "createdAt": "2025-06-29T00:00:00.000Z",
+      "updatedAt": "2025-06-29T00:00:00.000Z"
+    }
+  ],
+  "categories": [
+    {
+      "_id": "1",
+      "name": "Food",
+      "type": "expense",
+      "color": "#FF6B6B",
+      "icon": "utensils",
+      "isDefault": true
+    },
+    {
+      "_id": "2",
+      "name": "Transportation",
+      "type": "expense",
+      "color": "#4ECDC4",
+      "icon": "bus",
+      "isDefault": true
+    },
+    {
+      "_id": "3",
+      "name": "Shopping",
+      "type": "expense",
+      "color": "#FFD166",
+      "icon": "shopping-bag",
+      "isDefault": true
+    },
+    {
+      "_id": "4",
+      "name": "Salary",
+      "type": "income",
+      "color": "#06D6A0",
+      "icon": "money-bill-wave",
+      "isDefault": true
+    },
+    {
+      "_id": "5",
+      "name": "Freelance",
+      "type": "income",
+      "color": "#118AB2",
+      "icon": "laptop-code",
+      "isDefault": true
+    }
+  ]
+}

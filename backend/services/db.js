@@ -29,35 +29,39 @@ async function loadDB() {
     db = {
       transactions: savedData.transactions || [],
       users: savedData.users || [],
-      categories: [...DEFAULT_DB.categories, ...(savedData.categories || []).filter(c => !c.isDefault)]
+      categories: savedData.categories || [...DEFAULT_DB.categories]
     };
-    console.log('Database loaded successfully');
-  } catch (error) {
-    if (error.code === 'ENOENT') {
-      console.log('No existing database found, creating new one');
-      await saveDB();
-      
-      // Create default admin user if no users exist
-      if (db.users.length === 0) {
-        console.log('Creating default admin user...');
-        const hashedPassword = await bcrypt.hash('admin123', 10);
-        const adminUser = {
-          _id: uuidv4(),
-          name: 'Admin User',
-          email: 'admin@example.com',
-          password: hashedPassword,
-          role: 'admin',
-          isActive: true,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-        db.users.push(adminUser);
-        await saveDB();
-        console.log('Default admin user created:', adminUser.email);
+    
+    // Ensure all required categories exist
+    const categoryIds = db.categories.map(c => c._id);
+    for (const defaultCat of DEFAULT_DB.categories) {
+      if (!categoryIds.includes(defaultCat._id)) {
+        db.categories.push(defaultCat);
       }
-    } else {
-      console.error('Error loading database:', error);
     }
+    
+    console.log('✅ Database loaded successfully');
+  } catch (error) {
+    // If file doesn't exist or is corrupted, use default data
+    if (error.code === 'ENOENT') {
+      console.log('ℹ️ No existing database found, using default data');
+      db = { ...DEFAULT_DB };
+      // Save the default data
+      await saveDB();
+    } else {
+      console.error('❌ Error loading database:', error);
+      throw error;
+    }
+  }
+}
+
+// Ensure fresh data is loaded before each operation
+async function ensureFreshData() {
+  try {
+    await loadDB();
+  } catch (error) {
+    console.error('❌ Failed to refresh database:', error);
+    throw error;
   }
 }
 
@@ -74,20 +78,56 @@ async function saveDB() {
 // Initialize the database
 loadDB().catch(console.error);
 
+// Reload database every 5 seconds to catch external changes
+setInterval(() => {
+  loadDB().catch(console.error);
+}, 5000);
+
 module.exports = {
   // Transactions
   async getTransactions(userId) {
-    if (userId) {
-      return db.transactions.filter(t => t.user === userId);
+    await ensureFreshData();
+    try {
+      console.log('🔍 [DB] Fetching transactions for user:', userId);
+      
+      if (!db.transactions) {
+        console.warn('⚠️ [DB] Transactions array is not initialized');
+        return [];
+      }
+      
+      let transactions = [];
+      
+      if (userId) {
+        transactions = db.transactions.filter(t => {
+          const matches = t.user === userId || t.user?._id === userId;
+          if (!matches) {
+            console.log('❌ [DB] Transaction filtered out - User ID mismatch:', {
+              transactionId: t._id,
+              transactionUser: t.user,
+              requestedUser: userId
+            });
+          }
+          return matches;
+        });
+      } else {
+        transactions = [...db.transactions];
+      }
+      
+      console.log(`✅ [DB] Found ${transactions.length} transactions`);
+      return transactions;
+    } catch (error) {
+      console.error('❌ [DB] Error in getTransactions:', error);
+      throw error;
     }
-    return db.transactions;
   },
   
   async getTransactionById(id) {
+    await ensureFreshData();
     return db.transactions.find(t => t._id === id);
   },
   
   async addTransaction(transaction) {
+    await ensureFreshData();
     const newTransaction = { 
       ...transaction,
       _id: uuidv4(),
@@ -109,6 +149,7 @@ module.exports = {
   },
   
   async updateTransaction(id, updates) {
+    await ensureFreshData();
     const index = db.transactions.findIndex(t => t._id === id);
     if (index === -1) return null;
     
@@ -131,6 +172,7 @@ module.exports = {
   },
   
   async deleteTransaction(id) {
+    await ensureFreshData();
     const index = db.transactions.findIndex(t => t._id === id);
     if (index === -1) return false;
     
@@ -141,6 +183,7 @@ module.exports = {
 
   // Users
   async getUsers() {
+    await ensureFreshData();
     return db.users.map(user => {
       const { password, ...userWithoutPassword } = user;
       return userWithoutPassword;
@@ -148,6 +191,7 @@ module.exports = {
   },
   
   async getUserById(id) {
+    await ensureFreshData();
     const user = db.users.find(user => user._id === id);
     if (!user) return null;
     const { password, ...userWithoutPassword } = user;
@@ -155,14 +199,21 @@ module.exports = {
   },
   
   async findUserByEmail(email) {
-    return db.users.find(user => user.email === email);
+    await ensureFreshData();
+    console.log('🔍 [findUserByEmail] Looking for user with email:', email);
+    console.log('📋 Available users:', db.users.map(u => ({ email: u.email, id: u._id })));
+    const user = db.users.find(user => user.email === email);
+    console.log('✅ [findUserByEmail] Found user:', user ? { _id: user._id, email: user.email } : 'Not found');
+    return user;
   },
   
   async findUserByResetToken(token) {
+    await ensureFreshData();
     return db.users.find(user => user.resetPasswordToken === token);
   },
   
   async findByIdAndUpdate(id, update, options = {}) {
+    await ensureFreshData();
     const index = db.users.findIndex(user => user._id === id);
     if (index === -1) return null;
     
@@ -184,6 +235,7 @@ module.exports = {
   },
   
   async findByIdAndDelete(id) {
+    await ensureFreshData();
     const index = db.users.findIndex(user => user._id === id);
     if (index === -1) return null;
     
@@ -193,10 +245,12 @@ module.exports = {
   },
   
   async findById(id) {
+    await ensureFreshData();
     return db.users.find(user => user._id === id) || null;
   },
 
   async createUser(userData) {
+    await ensureFreshData();
     // Hash password if provided
     if (userData.password) {
       const salt = await bcrypt.genSalt(10);

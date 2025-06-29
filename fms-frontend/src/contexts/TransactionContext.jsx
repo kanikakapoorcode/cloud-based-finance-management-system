@@ -1,77 +1,92 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { getTransactions, addTransaction as apiAddTransaction, deleteTransaction as apiDeleteTransaction } from '../services/transactionService';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth } from './AuthContext';
+import { 
+  getTransactions as getTransactionsApi, 
+  createTransaction as createTransactionApi, 
+  updateTransaction as updateTransactionApi,
+  deleteTransaction as deleteTransactionApi 
+} from '../services/transactionService';
+import { useSnackbar } from 'notistack';
 
 const TransactionContext = createContext();
 
-export const useTransactions = () => useContext(TransactionContext);
+export const useTransactions = () => {
+  const context = useContext(TransactionContext);
+  if (!context) {
+    throw new Error('useTransactions must be used within a TransactionProvider');
+  }
+  return context;
+};
 
 export const TransactionProvider = ({ children }) => {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const { user } = useAuth();
+  const { currentUser, logout } = useAuth();
+  const { enqueueSnackbar } = useSnackbar();
+
+  const showError = useCallback((message) => {
+    enqueueSnackbar(message, { variant: 'error' });
+  }, [enqueueSnackbar]);
+
+  const showSuccess = useCallback((message) => {
+    enqueueSnackbar(message, { variant: 'success' });
+  }, [enqueueSnackbar]);
 
   const fetchTransactions = useCallback(async () => {
-    console.log('=== fetchTransactions called ===');
-    console.log('Current user:', user);
-    
-    if (!user) {
-      console.log('User not yet available, will retry when user is available');
-      setLoading(false);
-      return;
-    }
-    
-    // Get user ID from user object or localStorage
-    const userId = user.id || user._id || JSON.parse(localStorage.getItem('fms_user') || '{}')?._id;
-    console.log('User ID:', userId);
-    
-    if (!userId) {
-      const errorMsg = 'User ID not available';
-      console.error(errorMsg, { user });
-      setError(errorMsg);
-      setLoading(false);
-      return;
-    }
-    
+    console.group('🔍 fetchTransactions');
     try {
+      console.log('🔄 Fetching transactions');
       setLoading(true);
       setError(null);
-      console.log('Fetching transactions for user ID:', userId);
       
-      const transactions = await getTransactions(userId);
-      console.log('Fetched transactions:', transactions);
-      
-      if (!transactions) {
-        console.warn('No transactions data received');
+      try {
+        // Get transactions from API
+        const transactionsData = await getTransactions();
+        console.log('📥 Transactions data:', transactionsData);
+        
+        console.log(`✅ Found ${transactionsData.length} transactions`);
+        
+        // Sort transactions by date (newest first)
+        const sortedTransactions = [...transactionsData].sort((a, b) => {
+          const dateA = a.date ? new Date(a.date) : new Date(0);
+          const dateB = b.date ? new Date(b.date) : new Date(0);
+          return dateB - dateA;
+        });
+        
+        console.log('📅 Sorted transactions:', sortedTransactions);
+        setTransactions(sortedTransactions);
+        setError(null);
+      } catch (err) {
+        console.error('❌ Error fetching transactions:', {
+          message: err.message,
+          response: err.response?.data,
+          status: err.response?.status
+        });
+        setError(err.message || 'Failed to load transactions');
         setTransactions([]);
-        return;
       }
-      
-      // Ensure we have an array of transactions
-      const transactionsArray = Array.isArray(transactions) ? transactions : [transactions];
-      
-      console.log(`Setting ${transactionsArray.length} transactions`);
-      setTransactions(transactionsArray);
     } catch (err) {
       const errorMessage = err.response?.data?.message || err.message || 'An error occurred while fetching transactions.';
-      console.error('Error in fetchTransactions:', {
+      console.error('❌ Error in fetchTransactions:', {
         error: err,
         message: errorMessage,
-        response: err.response?.data
+        response: err.response?.data,
+        stack: err.stack
       });
       setError(errorMessage);
+      setTransactions([]); // Clear transactions on error
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [currentUser]);
 
   useEffect(() => {
-    console.log('=== TransactionContext useEffect triggered ===');
-    console.log('Current user in effect:', user);
+    console.log('=== TransactionContext useEffect ===');
+    console.log('Current user in effect:', currentUser);
     
     // Only try to fetch if we have a user
-    if (user) {
+    if (currentUser) {
       setLoading(true);
       fetchTransactions().catch(error => {
         console.error('Error in fetchTransactions:', error);
@@ -79,11 +94,11 @@ export const TransactionProvider = ({ children }) => {
         setLoading(false);
       });
     }
-  }, [fetchTransactions, user]);
+  }, [fetchTransactions, currentUser]);
 
   const addTransaction = async (transactionData) => {
     try {
-      const response = await apiAddTransaction(transactionData);
+      const response = await createTransactionApi(transactionData);
       if (response.success) {
         // Re-fetch transactions to get the updated list
         await fetchTransactions();
@@ -97,7 +112,7 @@ export const TransactionProvider = ({ children }) => {
 
   const deleteTransaction = async (id) => {
     try {
-      const response = await apiDeleteTransaction(id);
+      const response = await deleteTransactionApi(id);
       if (response.success) {
         setTransactions(transactions.filter(t => t._id !== id));
         return response;

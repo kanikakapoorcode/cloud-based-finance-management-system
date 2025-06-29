@@ -1,45 +1,157 @@
 {
-  "transactions": [],
+  "transactions": [
+    {
+      "_id": "f33b93ce-0cdb-4e53-97cc-95db0ef3b7cc",
+      "amount": -462,
+      "type": "expense",
+      "description": "Expense 1",
+      "date": "2025-06-17T21:11:17.349Z",
+      "category": "1",
+      "user": "test_user_1751145077246",
+      "paymentMethod": "debit card",
+      "isRecurring": false,
+      "createdAt": "2025-06-28T21:11:17.351Z",
+      "updatedAt": "2025-06-28T21:11:17.351Z"
+    },
+    {
+      "_id": "0990dcef-133d-4e4b-b780-58fd635e812e",
+      "amount": -226,
+      "type": "expense",
+      "description": "Expense 2",
+      "date": "2025-06-26T21:11:17.351Z",
+      "category": "1",
+      "user": "test_user_1751145077246",
+      "paymentMethod": "credit card",
+      "isRecurring": false,
+      "createdAt": "2025-06-28T21:11:17.351Z",
+      "updatedAt": "2025-06-28T21:11:17.351Z"
+    },
+    {
+      "_id": "4fa4aa03-9e26-4ed2-9c0e-4908fa984270",
+      "amount": 702,
+      "type": "income",
+      "description": "Income 3",
+      "date": "2025-06-04T21:11:17.351Z",
+      "category": "4",
+      "user": "test_user_1751145077246",
+      "paymentMethod": "debit card",
+      "isRecurring": false,
+      "createdAt": "2025-06-28T21:11:17.351Z",
+      "updatedAt": "2025-06-28T21:11:17.351Z"
+    },
+    {
+      "_id": "161696ab-fd15-4c8d-a2b1-387070cdbb84",
+      "amount": 681,
+      "type": "income",
+      "description": "Income 4",
+      "date": "2025-06-22T21:11:17.351Z",
+      "category": "4",
+      "user": "test_user_1751145077246",
+      "paymentMethod": "bank transfer",
+      "isRecurring": true,
+      "createdAt": "2025-06-28T21:11:17.351Z",
+      "updatedAt": "2025-06-28T21:11:17.351Z"
+    },
+    {
+      "_id": "9cb47b3a-e95b-47b7-a725-ad15bd872c5c",
+      "amount": -402,
+      "type": "expense",
+      "description": "Expense 5",
+      "date": "2025-06-20T21:11:17.351Z",
+      "category": "1",
+      "user": "test_user_1751145077246",
+      "paymentMethod": "bank transfer",
+      "isRecurring": false,
+      "createdAt": "2025-06-28T21:11:17.351Z",
+      "updatedAt": "2025-06-28T21:11:17.351Z"
+    },
+    {
+      "_id": "5b3e05fa-a8fd-4952-8769-14a2a9d88281",
+      "amount": -49,
+      "type": "expense",
+      "description": "Expense 6",
+      "date": "2025-06-16T21:11:17.351Z",
+      "category": "1",
+      "user": "test_user_1751145077246",
+      "paymentMethod": "credit card",
+      "isRecurring": false,
+      "createdAt": "2025-06-28T21:11:17.351Z",
+      "updatedAt": "2025-06-28T21:11:17.351Z"
+    },
+    {
+      "_id": "14be7c01-9943-4983-8887-3cfe302f904e",
+      "amount": -355,
+      "type": "expense",
+      "description": "Expense 7",
+      "date": "2025-06-24T21:11:17.351Z",
+      "category": "1",
+      "user": "test_user_1751145077246",
+      "paymentMethod": "bank transfer",
+      "isRecurring": false,
+      "createdAt": "2025-06-28T21:11:17.351Z",
+      "updatedAt": "2025-06-28T21:11:17.351Z"
+    },
+    {
+      "_id": "9590395c-c80c-41e9-be9d-6eb8712788ff",
+      "amount": -480,
+      "type": "expense",
+      "description": "Expense 8",
+      "date": "2025-06-26T21:11:17.351Z",
+      "category": "1",
+      "user": "test_user_1751145077246",
+      "paymentMethod": "credit card",
+      "isRecurring": false,
+      "createdAt": "2025-06-28T21:11:17.351Z",
+      "updatedAt": "2025-06-28T21:11:17.351Z"
+    },
+    {
+      "_id": "8476c654-f20d-4beb-a3e9-547aa5eea74f",
+      "amount": -80,
+      "type": "expense",
+      "description": "Expense 9",
+      "date": "2025-06-25T21:11:17.351Z",
+      "category": "1",
+      "user": "test_user_1751145077246",
+      "paymentMethod": "credit card",
+      "isRecurring": false,
+      "createdAt": "2025-06-28T21:11:17.351Z",
+      "updatedAt": "2025-06-28T21:11:17.351Z"
+    },
+    {
+      "_id": "da0dd501-9f4b-4bb4-9dbb-1afc00559ff7",
+      "amount": -60,
+      "type": "expense",
+      "description": "Expense 10",
+      "date": "2025-06-17T21:11:17.351Z",
+      "category": "1",
+      "user": "test_user_1751145077246",
+      "paymentMethod": "cash",
+      "isRecurring": true,
+      "createdAt": "2025-06-28T21:11:17.351Z",
+      "updatedAt": "2025-06-28T21:11:17.351Z"
+    }
+  ],
   "users": [
     {
-      "_id": "6f14e3cf-acc7-495d-a2fc-8db1772ba973",
+      "_id": "test_user_1751145077246",
       "name": "Test User",
       "email": "test@example.com",
-      "password": "$2a$10$B1S9aVUnaRIvT//AM/2NDuNjTAx73tNtGP5huh5dpgWAPrytK62Ti",
+      "password": "$2a$10$3SUZQp.2SrqQ90muBpVz4u2RSrjqlFegaszpHZOPMIB/BkmosOava",
+      "isVerified": true,
       "role": "user",
       "isActive": true,
-      "createdAt": "2025-06-21T18:55:02.193Z",
-      "updatedAt": "2025-06-21T18:55:02.213Z"
-    },
-    {
-      "_id": "893f2dc3-aa5f-4701-a57c-bd97ca70a7ec",
-      "name": "Admin User",
-      "email": "admin@example.com",
-      "password": "$2a$10$9IqfyAL5aQHBotGQtKBtIOnFd/bn6yiEdQTLOfIcNhd4Vg60byPYe",
-      "role": "admin",
-      "isActive": true,
-      "createdAt": "2025-06-21T18:55:02.301Z",
-      "updatedAt": "2025-06-21T18:55:02.301Z"
+      "createdAt": "2025-06-28T21:11:17.247Z",
+      "updatedAt": "2025-06-28T21:11:17.257Z"
     },
     {
       "name": "Kanika kapoor",
-      "email": "kanikakapoor.23022953@gehu.ac.in",
-      "password": "$2a$10$DQKZOUOIRZmxZLFcE03UYuYRmAx4i3cljtozU/EwUS23g1ecarfHi",
+      "email": "sheetalkapoor009@gmail.com",
+      "password": "$2a$10$Ra3sE9/zz7eLwYZSOo5SCuD6mZN7Ba0adocAyvmczlRjk5/OffgpO",
       "role": "user",
-      "_id": "26df3513-14ff-485e-b81a-6b3cd0564cfb",
+      "_id": "586c7cc1-8bda-4fba-b147-5f9996064a84",
       "isActive": true,
-      "createdAt": "2025-06-21T18:58:07.239Z",
-      "updatedAt": "2025-06-21T18:58:07.240Z"
-    },
-    {
-      "name": "Kanika kapoor",
-      "email": "kanikakr823@gmail.com",
-      "password": "$2a$10$s9k81tIGI0n0mzJwwo9XN.0r5eB16qJO6lJ8v9S0JPiceDlb.2nMW",
-      "role": "user",
-      "_id": "77317136-9848-4c39-84ed-60ce4f3d0a55",
-      "isActive": true,
-      "createdAt": "2025-06-21T20:31:28.781Z",
-      "updatedAt": "2025-06-21T20:31:28.784Z"
+      "createdAt": "2025-06-28T21:23:50.963Z",
+      "updatedAt": "2025-06-28T21:23:50.964Z"
     }
   ],
   "categories": [

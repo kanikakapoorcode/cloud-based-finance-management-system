@@ -1,0 +1,87 @@
+{
+  "transactions": [],
+  "users": [
+    {
+      "_id": "6f14e3cf-acc7-495d-a2fc-8db1772ba973",
+      "name": "Test User",
+      "email": "test@example.com",
+      "password": "$2a$10$B1S9aVUnaRIvT//AM/2NDuNjTAx73tNtGP5huh5dpgWAPrytK62Ti",
+      "role": "user",
+      "isActive": true,
+      "createdAt": "2025-06-21T18:55:02.193Z",
+      "updatedAt": "2025-06-21T18:55:02.213Z"
+    },
+    {
+      "_id": "893f2dc3-aa5f-4701-a57c-bd97ca70a7ec",
+      "name": "Admin User",
+      "email": "admin@example.com",
+      "password": "$2a$10$9IqfyAL5aQHBotGQtKBtIOnFd/bn6yiEdQTLOfIcNhd4Vg60byPYe",
+      "role": "admin",
+      "isActive": true,
+      "createdAt": "2025-06-21T18:55:02.301Z",
+      "updatedAt": "2025-06-21T18:55:02.301Z"
+    },
+    {
+      "name": "Kanika kapoor",
+      "email": "kanikakapoor.23022953@gehu.ac.in",
+      "password": "$2a$10$DQKZOUOIRZmxZLFcE03UYuYRmAx4i3cljtozU/EwUS23g1ecarfHi",
+      "role": "user",
+      "_id": "26df3513-14ff-485e-b81a-6b3cd0564cfb",
+      "isActive": true,
+      "createdAt": "2025-06-21T18:58:07.239Z",
+      "updatedAt": "2025-06-21T18:58:07.240Z"
+    },
+    {
+      "name": "Kanika kapoor",
+      "email": "kanikakr823@gmail.com",
+      "password": "$2a$10$s9k81tIGI0n0mzJwwo9XN.0r5eB16qJO6lJ8v9S0JPiceDlb.2nMW",
+      "role": "user",
+      "_id": "77317136-9848-4c39-84ed-60ce4f3d0a55",
+      "isActive": true,
+      "createdAt": "2025-06-21T20:31:28.781Z",
+      "updatedAt": "2025-06-21T20:31:28.784Z"
+    }
+  ],
+  "categories": [
+    {
+      "_id": "1",
+      "name": "Food",
+      "type": "expense",
+      "color": "#FF6B6B",
+      "icon": "utensils",
+      "isDefault": true
+    },
+    {
+      "_id": "2",
+      "name": "Transportation",
+      "type": "expense",
+      "color": "#4ECDC4",
+      "icon": "bus",
+      "isDefault": true
+    },
+    {
+      "_id": "3",
+      "name": "Shopping",
+      "type": "expense",
+      "color": "#FFD166",
+      "icon": "shopping-bag",
+      "isDefault": true
+    },
+    {
+      "_id": "4",
+      "name": "Salary",
+      "type": "income",
+      "color": "#06D6A0",
+      "icon": "money-bill-wave",
+      "isDefault": true
+    },
+    {
+      "_id": "5",
+      "name": "Freelance",
+      "type": "income",
+      "color": "#118AB2",
+      "icon": "laptop-code",
+      "isDefault": true
+    }
+  ]
+}

@@ -67,6 +67,11 @@ API.interceptors.request.use(
         console.log('Added Authorization header');
       } else {
         console.warn('No auth token available for protected endpoint');
+        localStorage.removeItem('fms_token');
+        localStorage.removeItem('fms_user');
+        
+        // Show error message using toast
+        console.error('Session expired. Please log in again.');
       }
       
       return config;
@@ -333,8 +338,22 @@ export const transactionAPI = {
     return API.post('/transactions', data);
   },
   getAll: (userId) => {
+    console.log('📡 [transactionAPI.getAll] Fetching transactions for user:', userId);
     const params = userId ? { userId } : {};
-    return API.get('/transactions', { params });
+    console.log('📡 [transactionAPI.getAll] Request params:', { params, baseURL: API.defaults.baseURL });
+    return API.get('/transactions', { params })
+      .then(response => {
+        console.log('✅ [transactionAPI.getAll] Response:', response);
+        return response;
+      })
+      .catch(error => {
+        console.error('❌ [transactionAPI.getAll] Error:', {
+          message: error.message,
+          response: error.response,
+          config: error.config
+        });
+        throw error;
+      });
   },
   getById: (id) => API.get(`/transactions/${id}`),
   update: (id, data) => API.patch(`/transactions/${id}`, data),

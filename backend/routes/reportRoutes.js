@@ -1,10 +1,6 @@
 const express = require('express');
 const { protect } = require('../middleware/auth');
-const {
-  getTransactionsReport,
-  getBudgetReport,
-  exportReport
-} = require('../controllers/reportController');
+const reportController = require('../controllers/reportController');
 
 const router = express.Router();
 
@@ -12,12 +8,19 @@ const router = express.Router();
 router.use(protect);
 
 // Transaction reports
-router.get('/transactions', getTransactionsReport);
+router.get('/transactions', reportController.getTransactionsReport);
 
 // Budget reports
-router.get('/budget', getBudgetReport);
+router.get('/budget', reportController.getBudgetReport);
+router.get('/budget-vs-actual', reportController.getBudgetVsActual);
+
+// Summary reports
+router.get('/summary', reportController.getFinancialSummary);
+
+// Category reports
+router.get('/category-wise', reportController.getCategoryWiseReport);
 
 // Export reports
-router.post('/export', exportReport);
+router.post('/export', reportController.exportReport);
 
 module.exports = router;

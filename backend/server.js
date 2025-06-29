@@ -12,6 +12,7 @@ const cors = require('cors');
 const { xss } = require('express-xss-sanitizer');
 const mongoSanitize = require('express-mongo-sanitize');
 const { errors } = require('celebrate');
+const connectDB = require('./config/db');
 
 // Import middleware
 const logger = require('./utils/logger');
@@ -23,7 +24,7 @@ const isProduction = NODE_ENV === 'production';
 
 // Initialize express app
 const app = express();
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT || 5002;
 
 // CORS configuration
 const corsOptions = {
@@ -47,11 +48,26 @@ require('./config/db');
 const authRoutes = require('./routes/auth');
 const categoryRoutes = require('./routes/categories');
 const transactionRoutes = require('./routes/transactions');
+const testRoutes = require('./routes/test');
+const testDataRoutes = require('./routes/testData');
 const userRoutes = require('./routes/users');
 const reportRoutes = require('./routes/reportRoutes');
 
-// Security middleware
-app.use(helmet());
+// Security headers with CSP configuration
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+        imgSrc: ["'self'", 'data:', 'https:'],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        connectSrc: ["'self'", 'http://localhost:5001', 'ws://localhost:5001'],
+      },
+    },
+  })
+);
 
 // Trust first proxy (if behind a proxy like Nginx)
 app.set('trust proxy', 1);
@@ -125,9 +141,11 @@ app.use((req, res, next) => {
 });
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/api/health', (req, res) => {
   res.status(200).json({
+    success: true,
     status: 'ok',
+    message: 'Server is running',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
@@ -141,6 +159,8 @@ app.get('/health', (req, res) => {
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/categories', categoryRoutes);
 app.use('/api/v1/transactions', transactionRoutes);
+app.use('/api/v1/test', testRoutes);
+app.use('/api/v1/test-data', testDataRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/reports', reportRoutes);
 
@@ -166,44 +186,93 @@ app.use(errors());
 // Error handling middleware
 app.use(errorHandler);
 
-// Start server
-const server = app.listen(PORT, '0.0.0.0', () => {
-  const address = server.address();
-  const host = address.address === '::' ? 'localhost' : address.address;
-  const port = address.port;
-  
-  logger.info(`\n${'='.repeat(70)}`);
-  logger.info(`🚀 Server running in ${NODE_ENV} mode on port ${port}`.green.bold);
-  logger.info(`🌐 Access the server at: http://${host}:${port}`.cyan.underline);
-  logger.info(`📊 Health Check: http://${host}:${port}/health`.cyan.underline);
-  
-  // Log MongoDB connection status
-  const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
-  logger.info(`\n📊 MongoDB connection: ${dbStatus}`);
-  
-  // Log environment information
-  logger.info(`\n🌍 Environment: ${NODE_ENV}`);
-  logger.info(`🛠️  Node version: ${process.version}`);
-  logger.info(`💻 Platform: ${process.platform} ${process.arch}`);
-  
-  // Log memory usage
-  const used = process.memoryUsage().heapUsed / 1024 / 1024;
-  logger.info(`💾 Memory usage: ${Math.round(used * 100) / 100} MB`);
-  logger.info(`${'='.repeat(70)}\n`);
-});
+// Create server instance
+let server;
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
-  logger.error('UNHANDLED REJECTION! 💥 Shutting down...', {
-    error: err.message,
-    stack: err.stack
-  });
-  
-  // Close server & exit process
-  server.close(() => {
+  logger.error(`\n❌ Unhandled Rejection: ${err.message}`.red);
+  logger.error(err.stack);
+  if (server) {
+    server.close(() => {
+      logger.error('💥 Server closed due to unhandled rejection');
+      process.exit(1);
+    });
+  } else {
     process.exit(1);
-  });
+  }
 });
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  logger.error('\n❌ UNCAUGHT EXCEPTION! 💥 Shutting down...'.red);
+  logger.error(`Error: ${err.message}`.red);
+  logger.error(err.stack);
+  process.exit(1);
+});
+
+// Connect to MongoDB and start server
+const startServer = async () => {
+  try {
+    logger.info('🔌 Connecting to MongoDB...'.yellow);
+    await connectDB();
+    
+    // Start server after successful DB connection
+    server = app.listen(PORT, '0.0.0.0', () => {
+      const address = server.address();
+      const host = address.address === '::' ? 'localhost' : address.address;
+      const port = address.port;
+      
+      logger.info(`\n${'='.repeat(70)}`);
+      logger.info(`🚀 Server running in ${NODE_ENV} mode on port ${port}`.green.bold);
+      logger.info(`🌐 Access the server at: http://${host}:${port}`.cyan.underline);
+      logger.info(`📊 Health Check: http://${host}:${port}/api/health`.cyan.underline);
+      
+      // Log MongoDB connection status
+      const dbStatus = mongoose.connection.readyState === 1 ? 'connected'.green : 'disconnected'.red;
+      logger.info(`\n📊 MongoDB connection: ${dbStatus}`);
+      
+      // Log environment information
+      logger.info(`\n🌍 Environment: ${NODE_ENV}`);
+      logger.info(`🛠️  Node version: ${process.version}`);
+      logger.info(`💻 Platform: ${process.platform} ${process.arch}`);
+      
+      // Log memory usage
+      const used = process.memoryUsage().heapUsed / 1024 / 1024;
+      logger.info(`💾 Memory usage: ${Math.round(used * 100) / 100} MB`);
+      logger.info(`${'='.repeat(70)}\n`);
+    });
+
+    // Handle server errors
+    server.on('error', (error) => {
+      if (error.syscall !== 'listen') throw error;
+      
+      const bind = typeof PORT === 'string' ? 'Pipe ' + PORT : 'Port ' + PORT;
+      
+      // Handle specific listen errors with friendly messages
+      switch (error.code) {
+        case 'EACCES':
+          logger.error(`❌ ${bind} requires elevated privileges`.red);
+          process.exit(1);
+          break;
+        case 'EADDRINUSE':
+          logger.error(`❌ ${bind} is already in use`.red);
+          process.exit(1);
+          break;
+        default:
+          throw error;
+      }
+    });
+    
+  } catch (error) {
+    logger.error(`\n❌ Failed to start server: ${error.message}`.red);
+    logger.error(`Stack: ${error.stack}`.red);
+    process.exit(1);
+  }
+};
+
+// Start the application
+startServer();
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {

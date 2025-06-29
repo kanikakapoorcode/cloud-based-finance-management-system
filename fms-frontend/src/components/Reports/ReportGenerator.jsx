@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { 
   Box, 
   Typography, 
@@ -95,6 +96,33 @@ import {
 } from '../../services/reportService';
 import { format, subDays, subMonths, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
+
+// TabPanel component for tabs
+const TabPanel = (props) => {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`tabpanel-${index}`}
+      aria-labelledby={`tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ p: 3 }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+};
+
+TabPanel.propTypes = {
+  children: PropTypes.node,
+  index: PropTypes.number.isRequired,
+  value: PropTypes.number.isRequired,
+};
 
 // Custom components
 const CustomTooltip = ({ active, payload, label }) => {
@@ -434,53 +462,368 @@ const ReportGenerator = () => {
   
   // Export to PDF
   const exportToPDF = (data, filename) => {
-    const doc = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-      format: 'a4'
-    });
-    
-    // Add header
-    doc.setFillColor(41, 98, 255);
-    doc.rect(0, 0, 297, 15, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Finance Management System', 148.5, 10, { align: 'center' });
-    
-    // Add report title
-    const reportTitle = {
-      transactions: 'Transaction Report',
-      income: 'Income Analysis',
-      expenses: 'Expense Analysis',
-      budget: 'Budget vs Actual'
-    }[reportType] || 'Financial Report';
-    
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(18);
-    doc.text(reportTitle, 148.5, 25, { align: 'center' });
-    
-    // Add date range
-    doc.setFontSize(12);
-    doc.text(`Period: ${format(dateRange.startDate, 'MMM d, yyyy')} to ${format(dateRange.endDate, 'MMM d, yyyy')}`, 
-      148.5, 32, { align: 'center' });
-    
-    // Add generation timestamp
-    doc.setFontSize(9);
-    doc.setTextColor(100, 100, 100);
-    doc.text(`Generated on: ${new Date().toLocaleString('en-IN')}`, 148.5, 38, { align: 'center' });
-    
-    // Add summary section
-    doc.setFillColor(240, 240, 240);
-    doc.rect(15, 45, 267, 40, 'F');
-    
-    // ... rest of the PDF generation code ...
-    
-    doc.save(`${filename}.pdf`);
+    if (!data) return null; // Add null check to prevent errors
+    if (!data) return;
+    try {
+      setLoading(true);
+      
+      // Format dates for filename
+      const startDateStr = formatDate(dateRange.startDate).replace(/\s/g, '-');
+      const endDateStr = formatDate(dateRange.endDate).replace(/\s/g, '-');
+      filename = filename || `${reportType}-${startDateStr}-to-${endDateStr}`;
+      
+      // Create PDF document in landscape orientation for better tables
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4'
+      });
+      
+      // Add company header
+      doc.setFillColor(41, 98, 255); // Blue header
+      doc.rect(0, 0, 297, 15, 'F');
+      doc.setTextColor(255, 255, 255); // White text
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Finance Management System', 148.5, 10, { align: 'center' });
+      
+      // Add report title
+      const reportTitle = {
+        transactions: 'Transaction Report',
+        income: 'Income Analysis',
+        expenses: 'Expense Analysis',
+        budget: 'Budget vs Actual'
+      }[reportType] || 'Report';
+      
+      doc.setTextColor(0, 0, 0); // Black text
+      doc.setFontSize(18);
+      doc.text(reportTitle, 148.5, 25, { align: 'center' });
+      
+      // Add date range
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'normal');
+      doc.text(
+        `Period: ${format(dateRange.startDate, 'MMM d, yyyy')} to ${format(dateRange.endDate, 'MMM d, yyyy')}`, 
+        148.5, 
+        32, 
+        { align: 'center' }
+      );
+      
+      // Add generation timestamp
+      doc.setFontSize(9);
+      doc.setTextColor(100, 100, 100);
+      doc.text(
+        `Generated on: ${new Date().toLocaleString('en-IN')}`, 
+        148.5, 
+        38, 
+        { align: 'center' }
+      );
+      
+      // Add summary section with colored box
+      doc.setFillColor(240, 240, 240); // Light gray background
+      doc.rect(15, 45, 267, 40, 'F');
+      
+      if (reportType === 'transactions') {
+        // Left align all summary items vertically with consistent formatting
+        const yStart = 60;
+        const lineHeight = 7;
+        
+        // Keep font consistent for all summary items
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'normal');
+        
+        doc.text(`Total Transactions: ${data.summary?.totalTransactions || 0}`, 20, yStart);
+        doc.text(`Total Income: ${formatCurrency(data.summary?.totalIncome || 0)}`, 20, yStart + lineHeight);
+        doc.text(`Total Expenses: ${formatCurrency(data.summary?.totalExpenses || 0)}`, 20, yStart + lineHeight * 2);
+        doc.text(`Net Amount: ${formatCurrency((data.summary?.totalIncome || 0) + (data.summary?.totalExpenses || 0))}`, 20, yStart + lineHeight * 3);
+        
+        // Add profit/loss indicator
+        const netAmount = (data.summary?.totalIncome || 0) + (data.summary?.totalExpenses || 0);
+        let profitLossText = '';
+        
+        if (netAmount > 0) {
+          profitLossText = `PROFIT: ${formatCurrency(netAmount)}`;
+          doc.setTextColor(0, 128, 0); // Green for profit
+        } else if (netAmount < 0) {
+          profitLossText = `LOSS: ${formatCurrency(Math.abs(netAmount))}`;
+          doc.setTextColor(255, 0, 0); // Red for loss
+        } else {
+          profitLossText = 'BREAK-EVEN';
+          doc.setTextColor(0, 0, 255); // Blue for break-even
+        }
+        
+        // Add a highlighted box for profit/loss
+        if (netAmount !== 0) {
+          // Calculate profit/loss percentage
+          const totalExpenses = Math.abs(data.summary?.totalExpenses || 0);
+          const profitLossPercentage = totalExpenses > 0 
+            ? ((Math.abs(netAmount) / totalExpenses) * 100).toFixed(1) 
+            : 0;
+            
+          profitLossText += ` (${profitLossPercentage}%)`;
+        }
+        
+        // Create a highlighted box for profit/loss
+        const textWidth = doc.getTextWidth(profitLossText);
+        if (netAmount > 0) {
+          doc.setFillColor(230, 255, 230); // Light green background
+        } else if (netAmount < 0) {
+          doc.setFillColor(255, 230, 230); // Light red background
+        } else {
+          doc.setFillColor(230, 230, 255); // Light blue background
+        }
+        
+        // Position the profit/loss indicator below the summary items
+        doc.roundedRect(20, yStart + lineHeight * 4, textWidth + 10, 8, 1, 1, 'F');
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text(profitLossText, 25, yStart + lineHeight * 4 + 5);
+        
+        // Reset text color and font
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'normal');
+      } else if (reportType === 'income') {
+        doc.text(`Total Income: ${formatCurrency(data.summary?.totalIncome || 0)}`, 20, 60);
+        
+        let xPos = 20;
+        let yPos = 68;
+        doc.text('Income by Category:', xPos, yPos);
+        yPos += 6;
+        
+        if (data.summary?.incomeByCategory) {
+          Object.entries(data.summary.incomeByCategory).forEach(([category, amount], index) => {
+            doc.text(`${category}: ${formatCurrency(amount)}`, xPos, yPos);
+            yPos += 6;
+            
+            // Create a new column after every 3 items
+            if ((index + 1) % 3 === 0 && index < Object.entries(data.summary.incomeByCategory).length - 1) {
+              xPos += 90;
+              yPos = 68 + 6;
+            }
+          });
+        }
+      } else if (reportType === 'expenses') {
+        doc.text(`Total Expenses: ${formatCurrency(data.summary?.totalExpenses || 0)}`, 20, 60);
+        
+        let xPos = 20;
+        let yPos = 68;
+        doc.text('Expenses by Category:', xPos, yPos);
+        yPos += 6;
+        
+        if (data.summary?.expensesByCategory) {
+          Object.entries(data.summary.expensesByCategory).forEach(([category, amount], index) => {
+            doc.text(`${category}: ${formatCurrency(amount)}`, xPos, yPos);
+            yPos += 6;
+            
+            // Create a new column after every 3 items
+            if ((index + 1) % 3 === 0 && index < Object.entries(data.summary.expensesByCategory).length - 1) {
+              xPos += 90;
+              yPos = 68 + 6;
+            }
+          });
+        }
+      } else if (reportType === 'budget') {
+        // Left align all summary items vertically with consistent formatting
+        const yStart = 60;
+        const lineHeight = 7;
+        
+        // Keep font consistent for all summary items
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'normal');
+        
+        doc.text(`Total Budget: ${formatCurrency(data.summary?.totalBudget || 0)}`, 20, yStart);
+        doc.text(`Total Spent: ${formatCurrency(data.summary?.totalActual || 0)}`, 20, yStart + lineHeight);
+        doc.text(`Remaining: ${formatCurrency((data.summary?.totalBudget || 0) - (data.summary?.totalActual || 0))}`, 20, yStart + lineHeight * 2);
+        doc.text(`Utilization: ${data.summary?.totalBudget ? ((data.summary.totalActual / data.summary.totalBudget) * 100).toFixed(1) : 0}%`, 20, yStart + lineHeight * 3);
+        
+        // Add profit/loss indicator for budget
+        const remaining = (data.summary?.totalBudget || 0) - (data.summary?.totalActual || 0);
+        let budgetStatusText = '';
+        
+        if (remaining > 0) {
+          budgetStatusText = `UNDER BUDGET: ${formatCurrency(remaining)}`;
+          doc.setTextColor(0, 128, 0); // Green for under budget
+        } else if (remaining < 0) {
+          budgetStatusText = `OVER BUDGET: ${formatCurrency(Math.abs(remaining))}`;
+          doc.setTextColor(255, 0, 0); // Red for over budget
+        } else {
+          budgetStatusText = 'ON BUDGET';
+          doc.setTextColor(0, 0, 255); // Blue for on budget
+        }
+        
+        // Add a highlighted box for budget status
+        if (remaining !== 0) {
+          // Calculate over/under budget percentage
+          const totalBudget = data.summary?.totalBudget || 0;
+          const budgetVariancePercentage = totalBudget > 0 
+            ? ((Math.abs(remaining) / totalBudget) * 100).toFixed(1) 
+            : 0;
+            
+          budgetStatusText += ` (${budgetVariancePercentage}%)`;
+        }
+        
+        // Create a highlighted box for budget status
+        const textWidth = doc.getTextWidth(budgetStatusText);
+        if (remaining > 0) {
+          doc.setFillColor(230, 255, 230); // Light green background
+        } else if (remaining < 0) {
+          doc.setFillColor(255, 230, 230); // Light red background
+        } else {
+          doc.setFillColor(230, 230, 255); // Light blue background
+        }
+        
+        // Position the budget status indicator below the summary items
+        doc.roundedRect(20, yStart + lineHeight * 4, textWidth + 10, 8, 1, 1, 'F');
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text(budgetStatusText, 25, yStart + lineHeight * 4 + 5);
+        
+        // Reset text color and font
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'normal');
+      }
+      
+      // Add data tables
+      let tableY = 95;
+      
+      // Add transactions table
+      if ((reportType === 'transactions' || reportType === 'income' || reportType === 'expenses') && data.data?.length) {
+        // Add table header
+        doc.setFillColor(41, 98, 255);
+        doc.rect(15, tableY, 267, 8, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Date', 20, tableY + 5);
+        doc.text('Description', 50, tableY + 5);
+        doc.text('Category', 120, tableY + 5);
+        doc.text('Amount', 250, tableY + 5, { align: 'right' });
+        
+        // Add table rows
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(0, 0, 0);
+        tableY += 10;
+        
+        data.data.forEach((item, index) => {
+          // Check if we need a new page
+          if (tableY > 180) {
+            doc.addPage();
+            doc.setPage(doc.internal.getNumberOfPages());
+            tableY = 20;
+          }
+          
+          // Alternate row colors
+          if (index % 2 === 0) {
+            doc.setFillColor(245, 245, 245);
+            doc.rect(15, tableY - 2, 267, 8, 'F');
+          }
+          
+          // Set text color based on amount
+          if (item.amount > 0) {
+            doc.setTextColor(0, 128, 0); // Green for income
+          } else {
+            doc.setTextColor(255, 0, 0); // Red for expenses
+          }
+          
+          // Add row data
+          doc.text(format(new Date(item.date), 'MMM d, yyyy'), 20, tableY + 5);
+          doc.text(item.description.substring(0, 30), 50, tableY + 5);
+          doc.text(item.category, 120, tableY + 5);
+          doc.text(formatCurrency(item.amount), 250, tableY + 5, { align: 'right' });
+          
+          // Reset text color
+          doc.setTextColor(0, 0, 0);
+          
+          tableY += 8;
+        });
+      } 
+      // Add budget table
+      else if (reportType === 'budget' && data.data?.length) {
+        // Add table header
+        doc.setFillColor(41, 98, 255);
+        doc.rect(15, tableY, 267, 8, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Category', 20, tableY + 5);
+        doc.text('Budget', 100, tableY + 5, { align: 'right' });
+        doc.text('Actual', 160, tableY + 5, { align: 'right' });
+        doc.text('Remaining', 220, tableY + 5, { align: 'right' });
+        doc.text('Status', 280, tableY + 5, { align: 'right' });
+        
+        // Add table rows
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(0, 0, 0);
+        tableY += 10;
+        
+        data.data.forEach((item, index) => {
+          // Check if we need a new page
+          if (tableY > 180) {
+            doc.addPage();
+            doc.setPage(doc.internal.getNumberOfPages());
+            tableY = 20;
+          }
+          
+          // Alternate row colors
+          if (index % 2 === 0) {
+            doc.setFillColor(245, 245, 245);
+            doc.rect(15, tableY - 2, 267, 8, 'F');
+          }
+          
+          // Add row data
+          doc.text(item.category, 20, tableY + 5);
+          doc.text(formatCurrency(item.budget), 100, tableY + 5, { align: 'right' });
+          doc.text(formatCurrency(item.actual), 160, tableY + 5, { align: 'right' });
+          doc.text(formatCurrency(item.remaining), 220, tableY + 5, { align: 'right' });
+          
+          // Add status with color coding
+          const percentUsed = (item.actual / item.budget) * 100;
+          
+          // Status text
+          let status = 'On Track';
+          if (percentUsed > 90) {
+            status = 'Critical';
+            doc.setTextColor(255, 0, 0); // Red
+          } else if (percentUsed > 75) {
+            status = 'Warning';
+            doc.setTextColor(255, 165, 0); // Orange
+          }
+          doc.text(status, 280, tableY + 5, { align: 'right' });
+          doc.setTextColor(0, 0, 0); // Reset to black
+          
+          tableY += 8;
+        });
+      }
+      
+      // Add footer to all pages
+      const pageCount = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        
+        // Add footer line
+        doc.setDrawColor(200, 200, 200);
+        doc.line(15, 200, 282, 200);
+        
+        // Add footer text
+        doc.setFontSize(8);
+        doc.setTextColor(100, 100, 100);
+        doc.text('Finance Management System - Generated Report', 148.5, 205, { align: 'center' });
+        doc.text(`Page ${i} of ${pageCount}`, 282, 205, { align: 'right' });
+      }
+      
+      // Save the PDF
+      doc.save(`${filename}.pdf`);
+    } catch (err) {
+      console.error('Error generating PDF:', err);
+      setError('Failed to generate PDF. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
-  
+
   // Export to CSV
   const exportToCSV = (data, filename) => {
+    if (!data) return null;
     let csvContent = '';
     
     // Add headers
@@ -527,6 +870,7 @@ const ReportGenerator = () => {
   
   // Export to Excel
   const exportToExcel = (data, filename) => {
+    if (!data) return null;
     const wb = XLSX.utils.book_new();
     
     if (reportType === 'transactions' || reportType === 'income' || reportType === 'expenses') {
@@ -582,6 +926,17 @@ const ReportGenerator = () => {
     }));
   };
   
+  // Render category breakdown chart
+  const renderCategoryBreakdown = () => {
+    if (!reportData?.summary) return null;
+    setFilters(prev => ({
+      ...prev,
+      categories: prev.categories.includes(category)
+        ? prev.categories.filter(c => c !== category)
+        : [...prev.categories, category]
+    }));
+  };
+  
   // Toggle sort order
   const toggleSortOrder = () => {
     setFilters(prev => ({
@@ -602,506 +957,53 @@ const ReportGenerator = () => {
       sortOrder: 'desc'
     });
   };
-      
-      // Format dates for filename
-      const startDateStr = formatDate(startDate).replace(/\s/g, '-');
-      const endDateStr = formatDate(endDate).replace(/\s/g, '-');
-      const filename = `${reportTitle}-${startDateStr}-to-${endDateStr}`;
-      
-      // Create PDF document in landscape orientation for better tables
-      const doc = new jsPDF({
-        orientation: 'landscape',
-        unit: 'mm',
-        format: 'a4'
-      });
-      
-      // Add company header
-      doc.setFillColor(41, 98, 255); // Blue header
-      doc.rect(0, 0, 297, 15, 'F');
-      doc.setTextColor(255, 255, 255); // White text
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Finance Management System', 148.5, 10, { align: 'center' });
-      
-      // Add report title
-      doc.setTextColor(0, 0, 0); // Black text
-      doc.setFontSize(18);
-      doc.setFont('helvetica', 'bold');
-      doc.text(reportTitle, 148.5, 25, { align: 'center' });
-      
-      // Add date range
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'normal');
-      doc.text(`Period: ${formatDate(startDate)} to ${formatDate(endDate)}`, 148.5, 32, { align: 'center' });
-      
-      // Add generation timestamp
-      const now = new Date();
-      doc.setFontSize(9);
-      doc.setTextColor(100, 100, 100); // Gray text
-      doc.text(`Generated on: ${now.toLocaleString('en-IN')}`, 148.5, 38, { align: 'center' });
-      
-      // Add summary section with colored box
-      doc.setFillColor(240, 240, 240); // Light gray background
-      doc.rect(15, 45, 267, 40, 'F'); // Increase height to accommodate vertical layout
-      
-      doc.setTextColor(0, 0, 0); // Black text
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Summary', 20, 53);
-      
-      // Add summary data based on report type
-      if (reportType === 'transactions') {
-        // Left align all summary items vertically with consistent formatting
-        const yStart = 60;
-        const lineHeight = 7;
-        
-        // Keep font consistent for all summary items
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'normal');
-        
-        doc.text(`Total Transactions: ${reportData.summary.totalTransactions}`, 20, yStart);
-        doc.text(`Total Income: ${formatCurrency(reportData.summary.totalIncome)}`, 20, yStart + lineHeight);
-        doc.text(`Total Expenses: ${formatCurrency(reportData.summary.totalExpenses)}`, 20, yStart + lineHeight * 2);
-        doc.text(`Net Amount: ${formatCurrency(reportData.summary.netAmount)}`, 20, yStart + lineHeight * 3);
-        
-        // Add profit/loss indicator
-        const netAmount = reportData.summary.netAmount;
-        let profitLossText = '';
-        
-        if (netAmount > 0) {
-          profitLossText = `PROFIT: ${formatCurrency(netAmount)}`;
-          doc.setTextColor(0, 128, 0); // Green for profit
-        } else if (netAmount < 0) {
-          profitLossText = `LOSS: ${formatCurrency(Math.abs(netAmount))}`;
-          doc.setTextColor(255, 0, 0); // Red for loss
-        } else {
-          profitLossText = 'BREAK-EVEN';
-          doc.setTextColor(0, 0, 255); // Blue for break-even
-        }
-        
-        // Add a highlighted box for profit/loss
-        if (netAmount !== 0) {
-          // Calculate profit/loss percentage
-          const totalExpenses = Math.abs(reportData.summary.totalExpenses);
-          const profitLossPercentage = totalExpenses > 0 
-            ? ((Math.abs(netAmount) / totalExpenses) * 100).toFixed(1) 
-            : 0;
-            
-          profitLossText += ` (${profitLossPercentage}%)`;
-        }
-        
-        // Create a highlighted box for profit/loss
-        const textWidth = doc.getTextWidth(profitLossText);
-        if (netAmount > 0) {
-          doc.setFillColor(230, 255, 230); // Light green background
-        } else if (netAmount < 0) {
-          doc.setFillColor(255, 230, 230); // Light red background
-        } else {
-          doc.setFillColor(230, 230, 255); // Light blue background
-        }
-        
-        // Position the profit/loss indicator below the summary items
-        doc.roundedRect(20, yStart + lineHeight * 4, textWidth + 10, 8, 1, 1, 'F');
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text(profitLossText, 25, yStart + lineHeight * 4 + 5);
-        
-        // Reset text color and font
-        doc.setTextColor(0, 0, 0);
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'normal');
-      } else if (reportType === 'income') {
-        doc.text(`Total Income: ${formatCurrency(reportData.summary.totalIncome)}`, 20, 60);
-        
-        let xPos = 20;
-        let yPos = 68;
-        doc.text('Income by Category:', xPos, yPos);
-        yPos += 6;
-        
-        Object.entries(reportData.summary.incomeByCategory).forEach(([category, amount], index) => {
-          doc.text(`${category}: ${formatCurrency(amount)}`, xPos, yPos);
-          yPos += 6;
-          
-          // Create a new column after every 3 items
-          if ((index + 1) % 3 === 0 && index < Object.entries(reportData.summary.incomeByCategory).length - 1) {
-            xPos += 90;
-            yPos = 68 + 6;
-          }
-        });
-      } else if (reportType === 'expenses') {
-        doc.text(`Total Expenses: ${formatCurrency(reportData.summary.totalExpenses)}`, 20, 60);
-        
-        let xPos = 20;
-        let yPos = 68;
-        doc.text('Expenses by Category:', xPos, yPos);
-        yPos += 6;
-        
-        Object.entries(reportData.summary.expensesByCategory).forEach(([category, amount], index) => {
-          doc.text(`${category}: ${formatCurrency(amount)}`, xPos, yPos);
-          yPos += 6;
-          
-          // Create a new column after every 3 items
-          if ((index + 1) % 3 === 0 && index < Object.entries(reportData.summary.expensesByCategory).length - 1) {
-            xPos += 90;
-            yPos = 68 + 6;
-          }
-        });
-      } else if (reportType === 'budget') {
-        // Left align all summary items vertically with consistent formatting
-        const yStart = 60;
-        const lineHeight = 7;
-        
-        // Keep font consistent for all summary items
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'normal');
-        
-        doc.text(`Total Budget: ${formatCurrency(reportData.summary.totalBudget)}`, 20, yStart);
-        doc.text(`Total Spent: ${formatCurrency(reportData.summary.totalActual)}`, 20, yStart + lineHeight);
-        doc.text(`Remaining: ${formatCurrency(reportData.summary.remaining)}`, 20, yStart + lineHeight * 2);
-        doc.text(`Utilization: ${((reportData.summary.totalActual / reportData.summary.totalBudget) * 100).toFixed(1)}%`, 20, yStart + lineHeight * 3);
-        
-        // Add profit/loss indicator for budget
-        const remaining = reportData.summary.remaining;
-        let budgetStatusText = '';
-        
-        if (remaining > 0) {
-          budgetStatusText = `UNDER BUDGET: ${formatCurrency(remaining)}`;
-          doc.setTextColor(0, 128, 0); // Green for under budget
-        } else if (remaining < 0) {
-          budgetStatusText = `OVER BUDGET: ${formatCurrency(Math.abs(remaining))}`;
-          doc.setTextColor(255, 0, 0); // Red for over budget
-        } else {
-          budgetStatusText = 'ON BUDGET';
-          doc.setTextColor(0, 0, 255); // Blue for on budget
-        }
-        
-        // Add a highlighted box for budget status
-        if (remaining !== 0) {
-          // Calculate over/under budget percentage
-          const totalBudget = reportData.summary.totalBudget;
-          const budgetVariancePercentage = totalBudget > 0 
-            ? ((Math.abs(remaining) / totalBudget) * 100).toFixed(1) 
-            : 0;
-            
-          budgetStatusText += ` (${budgetVariancePercentage}%)`;
-        }
-        
-        // Create a highlighted box for budget status
-        const textWidth = doc.getTextWidth(budgetStatusText);
-        if (remaining > 0) {
-          doc.setFillColor(230, 255, 230); // Light green background
-        } else if (remaining < 0) {
-          doc.setFillColor(255, 230, 230); // Light red background
-        } else {
-          doc.setFillColor(230, 230, 255); // Light blue background
-        }
-        
-        // Position the budget status indicator below the summary items
-        doc.roundedRect(20, yStart + lineHeight * 4, textWidth + 10, 8, 1, 1, 'F');
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text(budgetStatusText, 25, yStart + lineHeight * 4 + 5);
-        
-        // Reset text color and font
-        doc.setTextColor(0, 0, 0);
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'normal');
-      }
-      
-      // Add data tables
-      let tableY = 85;
-      
-      // Add transactions table if applicable
-      if (['transactions', 'income', 'expenses'].includes(reportType) && reportData.data.length > 0) {
-        doc.setFontSize(13);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Transaction Details', 20, tableY);
-        tableY += 8;
-        
-        // Table headers with colored background
-        doc.setFillColor(220, 220, 220); // Light gray background
-        doc.rect(15, tableY, 267, 7, 'F');
-        
-        doc.setFontSize(10);
-        doc.text('Date', 20, tableY + 5);
-        doc.text('Description', 60, tableY + 5);
-        doc.text('Category', 160, tableY + 5);
-        doc.text('Amount', 260, tableY + 5, { align: 'right' });
-        
-        tableY += 10;
-        doc.setFont('helvetica', 'normal');
-        
-        // Table rows with alternating colors
-        reportData.data.forEach((transaction, index) => {
-          // Check if we need a new page
-          if (tableY > 180) {
-            doc.addPage();
-            tableY = 20;
-            
-            // Add headers on new page
-            doc.setFillColor(220, 220, 220);
-            doc.rect(15, tableY, 267, 7, 'F');
-            
-            doc.setFont('helvetica', 'bold');
-            doc.text('Date', 20, tableY + 5);
-            doc.text('Description', 60, tableY + 5);
-            doc.text('Category', 160, tableY + 5);
-            doc.text('Amount', 260, tableY + 5, { align: 'right' });
-            
-            tableY += 10;
-            doc.setFont('helvetica', 'normal');
-          }
-          
-          // Alternating row colors
-          if (index % 2 === 1) {
-            doc.setFillColor(245, 245, 245);
-            doc.rect(15, tableY - 5, 267, 7, 'F');
-          }
-          
-          doc.text(formatDate(transaction.date), 20, tableY);
-          
-          // Truncate long descriptions
-          const description = transaction.description.length > 40 
-            ? transaction.description.substring(0, 40) + '...' 
-            : transaction.description;
-          
-          doc.text(description, 60, tableY);
-          doc.text(transaction.category, 160, tableY);
-          
-          // Right align and color the amount
-          const amount = formatCurrency(transaction.amount);
-          if (transaction.amount >= 0) {
-            doc.setTextColor(0, 128, 0); // Green for positive
-          } else {
-            doc.setTextColor(255, 0, 0); // Red for negative
-          }
-          doc.text(amount, 260, tableY, { align: 'right' });
-          doc.setTextColor(0, 0, 0); // Reset to black
-          
-          tableY += 7;
-        });
-      }
-      
-      // Add budget table if applicable
-      if (reportType === 'budget' && reportData.data.length > 0) {
-        doc.setFontSize(13);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Budget Details', 20, tableY);
-        tableY += 8;
-        
-        // Table headers with colored background
-        doc.setFillColor(220, 220, 220);
-        doc.rect(15, tableY, 267, 7, 'F');
-        
-        doc.setFontSize(10);
-        doc.text('Category', 20, tableY + 5);
-        doc.text('Budget', 80, tableY + 5, { align: 'right' });
-        doc.text('Actual', 120, tableY + 5, { align: 'right' });
-        doc.text('Remaining', 160, tableY + 5, { align: 'right' });
-        doc.text('% Used', 200, tableY + 5, { align: 'right' });
-        doc.text('Status', 240, tableY + 5);
-        
-        tableY += 10;
-        doc.setFont('helvetica', 'normal');
-        
-        // Table rows with alternating colors
-        reportData.data.forEach((item, index) => {
-          // Alternating row colors
-          if (index % 2 === 1) {
-            doc.setFillColor(245, 245, 245);
-            doc.rect(15, tableY - 5, 267, 7, 'F');
-          }
-          
-          const remaining = item.budget - item.actual;
-          const percentUsed = ((item.actual / item.budget) * 100).toFixed(0);
-          
-          doc.text(item.category, 20, tableY);
-          doc.text(formatCurrency(item.budget), 80, tableY, { align: 'right' });
-          doc.text(formatCurrency(item.actual), 120, tableY, { align: 'right' });
-          
-          // Color the remaining amount
-          if (remaining >= 0) {
-            doc.setTextColor(0, 128, 0); // Green for positive
-          } else {
-            doc.setTextColor(255, 0, 0); // Red for negative
-          }
-          doc.text(formatCurrency(remaining), 160, tableY, { align: 'right' });
-          doc.setTextColor(0, 0, 0); // Reset to black
-          
-          doc.text(`${percentUsed}%`, 200, tableY, { align: 'right' });
-          
-          // Status text
-          let status = 'On Track';
-          if (percentUsed > 90) {
-            status = 'Critical';
-            doc.setTextColor(255, 0, 0); // Red
-          } else if (percentUsed > 75) {
-            status = 'Warning';
-            doc.setTextColor(255, 165, 0); // Orange
-          }
-          doc.text(status, 240, tableY);
-          doc.setTextColor(0, 0, 0); // Reset to black
-          
-          tableY += 7;
-        });
-      }
-      
-      // Add footer to all pages
-      const pageCount = doc.internal.getNumberOfPages();
-      for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i);
-        
-        // Add footer line
-        doc.setDrawColor(200, 200, 200);
-        doc.line(15, 190, 282, 190);
-        
-        // Add footer text
-        doc.setFontSize(8);
-        doc.setTextColor(100, 100, 100);
-        doc.text(`Finance Management System - ${reportTitle}`, 148.5, 195, { align: 'center' });
-        doc.text(`Page ${i} of ${pageCount}`, 282, 195, { align: 'right' });
-      }
-      
-      // Save the PDF
-      doc.save(`${filename}.pdf`);
-      
-    } catch (err) {
-      console.error('Error generating PDF:', err);
-      setError('Failed to generate PDF. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Colors for charts
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658'];
-  
-  // Process API response data into consistent format
-  const processReportData = (data, type) => {
-    if (!data) return null;
-    
-    switch (type) {
-      case 'transactions':
-        return {
-          ...data,
-          summary: {
-            ...data.summary,
-            netAmount: (data.summary?.totalIncome || 0) - (data.summary?.totalExpenses || 0)
-          }
-        };
-        
-      case 'income':
-        return {
-          ...data,
-          summary: {
-            totalIncome: data.summary?.total || 0,
-            incomeByCategory: data.summary?.byCategory || {}
-          }
-        };
-        
-      case 'expenses':
-        return {
-          ...data,
-          summary: {
-            totalExpenses: data.summary?.total || 0,
-            expensesByCategory: data.summary?.byCategory || {},
-            chartData: Object.entries(data.summary?.byCategory || {}).map(([name, value]) => ({
-              name,
-              value: Math.abs(value)
-            }))
-          }
-        };
-        
-      case 'budget':
-        return {
-          ...data,
-          summary: {
-            totalBudget: data.summary?.totalBudget || 0,
-            totalActual: data.summary?.totalActual || 0,
-            remaining: (data.summary?.totalBudget || 0) - (data.summary?.totalActual || 0)
-          },
-          data: data.data?.map(item => ({
-            ...item,
-            remaining: item.budget - item.actual,
-            percentUsed: (item.actual / item.budget) * 100
-          })) || []
-        };
-        
-      default:
-        return data;
-    }
-  };
-
-  const handleGenerateReport = async () => {
-    if (!currentUser) {
-      navigate('/login', { state: { from: '/reports' } });
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const { startDate: start, endDate: end } = dateRange;
-      const { search, categories, minAmount, maxAmount, transactionType, sortBy, sortOrder } = filters;
-      
-      // Validate dates
-      if (new Date(start) > new Date(end)) {
-        throw new Error('Start date cannot be after end date');
-      }
-      
-      // Prepare API parameters
-      const params = {
-        startDate: format(new Date(start), 'yyyy-MM-dd'),
-        endDate: format(new Date(end), 'yyyy-MM-dd'),
-        search,
-        categories: categories.join(','),
-        minAmount,
-        maxAmount,
-        type: transactionType !== 'all' ? transactionType : undefined,
-        sortBy,
-        sortOrder
-      };
-      
-      let response;
-      
-      switch(reportType) {
-        case 'transactions':
-        case 'income':
-        case 'expenses':
-          response = await getTransactionsReport({
-            ...params,
-            type: reportType === 'transactions' ? undefined : reportType
-          });
-          break;
-          
-        case 'budget':
-          response = await getBudgetReport({
-            month: new Date(start).getMonth() + 1,
-            year: new Date(start).getFullYear(),
-            categories: categories.join(',')
-          });
-          break;
-          
-        default:
-          throw new Error('Invalid report type');
-      }
-      
-      // Process and set report data
-      setReportData(processReportData(response.data, reportType));
-      
-    } catch (err) {
-      console.error('Error generating report:', err);
-      setError(err.response?.data?.message || err.message || 'Failed to generate report');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Format date for display
   const formatDate = (dateString) => {
-    const options = { year: 'numeric', month: 'short', day: 'numeric' };
-    return new Date(dateString).toLocaleDateString('en-IN', options);
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  // Format currency for display
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
+  };
+
+  // TabPanel component for the tabs
+  function TabPanel(props) {
+    const { children, value, index, ...other } = props;
+  
+    return (
+      <div
+        role="tabpanel"
+        hidden={value !== index}
+        id={`simple-tabpanel-${index}`}
+        aria-labelledby={`simple-tab-${index}`}
+        {...other}
+      >
+        {value === index && (
+          <Box sx={{ p: 3 }}>
+            {children}
+          </Box>
+        )}
+      </div>
+    );
+  }
+
+  TabPanel.propTypes = {
+    children: PropTypes.node,
+    index: PropTypes.number.isRequired,
+    value: PropTypes.number.isRequired,
   };
 
   return (
@@ -1120,11 +1022,17 @@ const ReportGenerator = () => {
             >
               {showFilters ? 'Hide Filters' : 'Show Filters'}
             </Button>
-            <ExportMenu onExport={handleExportReport} />
+            <Button 
+              variant="contained" 
+              color="primary" 
+              onClick={() => handleExportReport('pdf')}
+              startIcon={<DownloadIcon />}
+            >
+              Export Report
+            </Button>
           </Box>
         )}
       </Box>
-      
       <Paper elevation={3} sx={{ p: 3, mb: 3, borderRadius: 2 }}>
         <Typography variant="h6" gutterBottom fontWeight="medium" color="primary">
           Generate Report
@@ -1606,326 +1514,6 @@ const ReportGenerator = () => {
           >
             Generate Report
           </Button>
-        </Paper>
-      )}
-    </Box>
-  );
-};
-
-// Tab Panel Component
-function TabPanel(props) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`report-tabpanel-${index}`}
-      aria-labelledby={`report-tab-${index}`}
-      {...other}
-    >
-      {value === index && (
-        <Box sx={{ p: 3 }}>
-          {children}
-        </Box>
-      )}
-    </div>
-  );
-}
-
-TabPanel.propTypes = {
-  children: PropTypes.node,
-  index: PropTypes.number.isRequired,
-  value: PropTypes.number.isRequired,
-};
-
-// Helper function to generate chart colors
-const generateChartColors = (count) => {
-  const colors = [
-    '#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', 
-    '#82ca9d', '#ffc658', '#ff7c43', '#665191', '#a05195',
-    '#f95d6a', '#ffa600', '#003f5c', '#2f4b7c', '#665191'
-  ];
-  return colors.slice(0, count);
-};
-
-// Helper function to format currency with proper sign
-const formatCurrencyWithSign = (value, type = 'expense') => {
-  const absValue = Math.abs(value);
-  const formatted = formatCurrency(absValue);
-  return type === 'income' ? `+${formatted}` : `-${formatted}`;
-};
-
-export default ReportGenerator;
-          
-          <Divider sx={{ mb: 3 }} />
-          
-          {/* Report Summary */}
-          <Grid container spacing={3} sx={{ mb: 4 }}>
-            {reportType === 'transactions' && (
-              <>
-                <Grid item xs={6} sm={3}>
-                  <Paper elevation={1} sx={{ p: 2, textAlign: 'center', bgcolor: 'primary.lighter', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary">Transactions</Typography>
-                    <Typography variant="h6" fontWeight="bold">{reportData.summary.totalTransactions}</Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={6} sm={3}>
-                  <Paper elevation={1} sx={{ p: 2, textAlign: 'center', bgcolor: 'success.lighter', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary">Income</Typography>
-                    <Typography variant="h6" fontWeight="bold" color="success.main">{formatCurrency(reportData.summary.totalIncome)}</Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={6} sm={3}>
-                  <Paper elevation={1} sx={{ p: 2, textAlign: 'center', bgcolor: 'error.lighter', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary">Expenses</Typography>
-                    <Typography variant="h6" fontWeight="bold" color="error.main">{formatCurrency(reportData.summary.totalExpenses)}</Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={6} sm={3}>
-                  <Paper elevation={1} sx={{ p: 2, textAlign: 'center', bgcolor: 'info.lighter', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary">Net Amount</Typography>
-                    <Typography variant="h6" fontWeight="bold" color={reportData.summary.netAmount >= 0 ? 'success.main' : 'error.main'}>
-                      {formatCurrency(reportData.summary.netAmount)}
-                    </Typography>
-                  </Paper>
-                </Grid>
-              </>
-            )}
-            
-            {reportType === 'income' && (
-              <>
-                <Grid item xs={12} sm={4}>
-                  <Paper elevation={1} sx={{ p: 2, textAlign: 'center', bgcolor: 'success.lighter', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary">Total Income</Typography>
-                    <Typography variant="h6" fontWeight="bold" color="success.main">{formatCurrency(reportData.summary.totalIncome)}</Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={8}>
-                  <Paper elevation={1} sx={{ p: 2, bgcolor: 'background.paper', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary" gutterBottom>Income by Category</Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                      {Object.entries(reportData.summary.incomeByCategory).map(([category, amount]) => (
-                        <Chip 
-                          key={category}
-                          label={`${category}: ${formatCurrency(amount)}`}
-                          color="success"
-                          variant="outlined"
-                          size="small"
-                        />
-                      ))}
-                    </Box>
-                  </Paper>
-                </Grid>
-              </>
-            )}
-            
-            {reportType === 'expenses' && (
-              <>
-                <Grid item xs={12} sm={4}>
-                  <Paper elevation={1} sx={{ p: 2, textAlign: 'center', bgcolor: 'error.lighter', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary">Total Expenses</Typography>
-                    <Typography variant="h6" fontWeight="bold" color="error.main">{formatCurrency(reportData.summary.totalExpenses)}</Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={8}>
-                  <Paper elevation={1} sx={{ p: 2, height: '100%', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary" gutterBottom>Expenses by Category</Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                      {Object.entries(reportData.summary.expensesByCategory).map(([category, amount]) => (
-                        <Chip 
-                          key={category}
-                          label={`${category}: ${formatCurrency(amount)}`}
-                          color="error"
-                          variant="outlined"
-                          size="small"
-                        />
-                      ))}
-                    </Box>
-                  </Paper>
-                </Grid>
-              </>
-            )}
-            
-            {reportType === 'budget' && (
-              <>
-                <Grid item xs={12} sm={4}>
-                  <Paper elevation={1} sx={{ p: 2, textAlign: 'center', bgcolor: 'primary.lighter', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary">Total Budget</Typography>
-                    <Typography variant="h6" fontWeight="bold">{formatCurrency(reportData.summary.totalBudget)}</Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <Paper elevation={1} sx={{ p: 2, textAlign: 'center', bgcolor: 'error.lighter', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary">Total Spent</Typography>
-                    <Typography variant="h6" fontWeight="bold" color="error.main">{formatCurrency(reportData.summary.totalActual)}</Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <Paper elevation={1} sx={{ p: 2, textAlign: 'center', bgcolor: 'success.lighter', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary">Remaining</Typography>
-                    <Typography variant="h6" fontWeight="bold" color="success.main">{formatCurrency(reportData.summary.remaining)}</Typography>
-                  </Paper>
-                </Grid>
-              </>
-            )}
-          </Grid>
-          
-          {/* Charts */}
-          {reportType === 'expenses' && reportData.summary.chartData.length > 0 && (
-            <Box sx={{ height: 300, mb: 4 }}>
-              <Typography variant="subtitle1" gutterBottom>Expense Distribution</Typography>
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={reportData.summary.chartData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                    nameKey="name"
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {reportData.summary.chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => formatCurrency(value)} />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </Box>
-          )}
-          
-          {reportType === 'budget' && (
-            <Box sx={{ height: 400, mb: 4 }}>
-              <Typography variant="subtitle1" gutterBottom>Budget vs Actual Spending</Typography>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={reportData.data}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="category" />
-                  <YAxis tickFormatter={(value) => `₹${value/1000}k`} />
-                  <Tooltip formatter={(value) => formatCurrency(value)} />
-                  <Legend />
-                  <Bar dataKey="budget" name="Budget" fill="#8884d8" />
-                  <Bar dataKey="actual" name="Actual" fill="#82ca9d" />
-                </BarChart>
-              </ResponsiveContainer>
-            </Box>
-          )}
-          
-          {/* Data Table */}
-          {(reportType === 'transactions' || reportType === 'income' || reportType === 'expenses') && (
-            <Box>
-              <Typography variant="subtitle1" gutterBottom>Detailed Transactions</Typography>
-              <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Date</TableCell>
-                      <TableCell>Description</TableCell>
-                      <TableCell>Category</TableCell>
-                      <TableCell align="right">Amount</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {reportData.data.length > 0 ? (
-                      reportData.data.map((transaction) => (
-                        <TableRow key={transaction.id}>
-                          <TableCell>{formatDate(transaction.date)}</TableCell>
-                          <TableCell>{transaction.description}</TableCell>
-                          <TableCell>
-                            <Chip 
-                              label={transaction.category} 
-                              size="small" 
-                              color={transaction.amount > 0 ? 'success' : 'default'}
-                              variant="outlined"
-                            />
-                          </TableCell>
-                          <TableCell align="right" sx={{ 
-                            color: transaction.amount >= 0 ? 'success.main' : 'error.main',
-                            fontWeight: 'medium'
-                          }}>
-                            {formatCurrency(transaction.amount)}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={4} align="center">No transactions found for the selected period</TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Box>
-          )}
-          
-          {reportType === 'budget' && (
-            <Box>
-              <Typography variant="subtitle1" gutterBottom>Budget Details</Typography>
-              <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Category</TableCell>
-                      <TableCell align="right">Budget</TableCell>
-                      <TableCell align="right">Actual</TableCell>
-                      <TableCell align="right">Remaining</TableCell>
-                      <TableCell align="right">% Used</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {reportData.data.map((item) => {
-                      const remaining = item.budget - item.actual;
-                      const percentUsed = (item.actual / item.budget) * 100;
-                      
-                      return (
-                        <TableRow key={item.category}>
-                          <TableCell>{item.category}</TableCell>
-                          <TableCell align="right">{formatCurrency(item.budget)}</TableCell>
-                          <TableCell align="right">{formatCurrency(item.actual)}</TableCell>
-                          <TableCell align="right" sx={{ color: remaining >= 0 ? 'success.main' : 'error.main' }}>
-                            {formatCurrency(remaining)}
-                          </TableCell>
-                          <TableCell align="right">
-                            <Chip 
-                              label={`${percentUsed.toFixed(0)}%`} 
-                              size="small" 
-                              color={percentUsed > 90 ? 'error' : percentUsed > 75 ? 'warning' : 'success'}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Box>
-          )}
-          
-          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
-            <Button variant="outlined" onClick={() => window.print()} sx={{ mr: 2 }}>
-              Print Report
-            </Button>
-            <Button variant="contained" onClick={handleDownloadPDF}>
-              Download PDF
-            </Button>
-          </Box>
-        </Paper>
-      ) : (
-        <Paper elevation={3} sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
-          <Typography variant="h6" color="text.secondary" gutterBottom>
-            No Report Generated
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Select a report type and date range, then click "Generate Report" to view your financial data.
-          </Typography>
         </Paper>
       )}
     </Box>

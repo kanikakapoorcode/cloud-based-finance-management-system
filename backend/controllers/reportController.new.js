@@ -79,101 +79,6 @@ exports.getTransactionsReport = asyncHandler(async (req, res, next) => {
   });
 });
 
-// @desc    Get budget report
-// @route   GET /api/v1/reports/budget
-// @access  Private
-exports.getBudgetReport = asyncHandler(async (req, res, next) => {
-  const userId = req.user.id;
-  const { month, year } = req.query;
-  
-  // Parse month and year or use current month/year
-  const targetMonth = month ? parseInt(month) - 1 : new Date().getMonth();
-  const targetYear = year ? parseInt(year) : new Date().getFullYear();
-  
-  // Get first and last day of the target month
-  const firstDay = new Date(targetYear, targetMonth, 1);
-  const lastDay = new Date(targetYear, targetMonth + 1, 0);
-  
-  try {
-    // Get all budgets for the user (both monthly and recurring)
-    const budgets = await Budget.find({
-      user: userId,
-      $or: [
-        { month: { $exists: false } }, // Recurring budgets
-        { 
-          month: targetMonth + 1,
-          year: targetYear
-        }
-      ]
-    }).populate('category', 'name type color icon');
-    
-    // Get transactions for the month
-    const transactions = await Transaction.find({
-      user: userId,
-      date: { $gte: firstDay, $lte: lastDay },
-      amount: { $lt: 0 } // Only expenses for budget tracking
-    }).populate('category', 'name type');
-    
-    // Calculate spending by category
-    const spendingByCategory = {};
-    transactions.forEach(transaction => {
-      const categoryId = transaction.category ? transaction.category._id.toString() : 'uncategorized';
-      spendingByCategory[categoryId] = (spendingByCategory[categoryId] || 0) + Math.abs(transaction.amount);
-    });
-    
-    // Prepare budget report
-    const budgetReport = budgets.map(budget => {
-      const categoryId = budget.category ? budget.category._id.toString() : 'uncategorized';
-      const spent = spendingByCategory[categoryId] || 0;
-      const remaining = Math.max(0, budget.amount - spent);
-      const percentageUsed = budget.amount > 0 ? Math.min(100, Math.round((spent / budget.amount) * 100)) : 0;
-      
-      return {
-        category: budget.category ? budget.category.name : 'Uncategorized',
-        categoryId: budget.category ? budget.category._id : null,
-        type: budget.category ? budget.category.type : 'expense',
-        icon: budget.category ? budget.category.icon : 'category',
-        color: budget.category ? budget.category.color : '#6c757d',
-        budget: budget.amount,
-        spent,
-        remaining,
-        percentageUsed,
-        isOverBudget: spent > budget.amount
-      };
-    });
-    
-    // Calculate totals
-    const totalBudget = budgets.reduce((sum, budget) => sum + budget.amount, 0);
-    const totalSpent = Object.values(spendingByCategory).reduce((sum, amount) => sum + amount, 0);
-    const totalRemaining = Math.max(0, totalBudget - totalSpent);
-    const totalPercentageUsed = totalBudget > 0 ? Math.min(100, Math.round((totalSpent / totalBudget) * 100)) : 0;
-    
-    res.status(200).json({
-      success: true,
-      data: {
-        period: {
-          month: targetMonth + 1,
-          year: targetYear,
-          start: firstDay,
-          end: lastDay
-        },
-        summary: {
-          totalBudget,
-          totalSpent,
-          totalRemaining,
-          totalPercentageUsed,
-          isOverBudget: totalSpent > totalBudget
-        },
-        budgets: budgetReport
-      }
-    });
-    
-  } catch (error) {
-    logger.error(`Error in getBudgetReport: ${error.message}`, { error });
-    return next(new ErrorResponse('Error generating budget report', 500));
-  }
-});
-
 // @desc    Get financial summary
 // @route   GET /api/v1/reports/summary
 // @access  Private
@@ -343,9 +248,6 @@ exports.getBudgetVsActual = asyncHandler(async (req, res, next) => {
     actualsByCategory[categoryId] = (actualsByCategory[categoryId] || 0) + Math.abs(t.amount);
   });
   
-  // Get all categories for the user
-  const categories = await Category.find({ user: userId });
-  
   // Prepare report
   const report = budgets.map(budget => {
     const categoryId = budget.category ? budget.category._id.toString() : 'uncategorized';
@@ -405,16 +307,5 @@ exports.getBudgetVsActual = asyncHandler(async (req, res, next) => {
       },
       categories: report
     }
-  });
-});
-
-// @desc    Export report
-// @route   POST /api/v1/reports/export
-// @access  Private
-exports.exportReport = asyncHandler(async (req, res, next) => {
-  // Implementation for exporting reports
-  res.status(200).json({
-    success: true,
-    message: 'Export functionality will be implemented here'
   });
 });

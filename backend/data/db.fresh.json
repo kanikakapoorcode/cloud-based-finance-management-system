@@ -1,0 +1,46 @@
+{
+  "transactions": [],
+  "users": [],
+  "categories": [
+    {
+      "_id": "1",
+      "name": "Food",
+      "type": "expense",
+      "color": "#FF6B6B",
+      "icon": "utensils",
+      "isDefault": true
+    },
+    {
+      "_id": "2",
+      "name": "Transportation",
+      "type": "expense",
+      "color": "#4ECDC4",
+      "icon": "bus",
+      "isDefault": true
+    },
+    {
+      "_id": "3",
+      "name": "Shopping",
+      "type": "expense",
+      "color": "#FFD166",
+      "icon": "shopping-bag",
+      "isDefault": true
+    },
+    {
+      "_id": "4",
+      "name": "Salary",
+      "type": "income",
+      "color": "#06D6A0",
+      "icon": "money-bill-wave",
+      "isDefault": true
+    },
+    {
+      "_id": "5",
+      "name": "Freelance",
+      "type": "income",
+      "color": "#118AB2",
+      "icon": "laptop-code",
+      "isDefault": true
+    }
+  ]
+}

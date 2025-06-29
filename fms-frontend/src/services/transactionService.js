@@ -6,54 +6,69 @@ import { transactionAPI } from './api';
  * @param {string} userId - The ID of the user to fetch transactions for
  * @returns {Promise<Array>} - Array of transaction objects
  */
-export const getTransactions = async (userId) => {
-  console.log('[TransactionService] Fetching transactions for user:', userId);
+export const getTransactions = async () => {
+  console.log('🔍 [TransactionService] Fetching transactions');
   
-  if (!userId) {
-    const error = new Error('User ID is required to fetch transactions');
-    console.error('[TransactionService] No user ID provided');
-    throw error;
-  }
-
   try {
-    console.log('[TransactionService] Sending request to fetch transactions');
-    const response = await transactionAPI.getAll(userId);
-    console.log('[TransactionService] API Response:', response);
+    console.log('📡 [TransactionService] Sending request to fetch transactions');
+    const response = await transactionAPI.getAll();
+    console.log('📥 [TransactionService] Raw API Response:', response);
     
-    // The API response structure might be different than expected
-    // Let's handle different possible response structures
-    if (response && response.data) {
-      // If response has a data property, use that
-      return Array.isArray(response.data) ? response.data : [response.data];
-    } else if (Array.isArray(response)) {
-      // If response is already an array, return it directly
-      return response;
-    } else if (response) {
-      // If response is a single object, wrap it in an array
-      return [response];
+    // If no response, return empty array
+    if (!response) {
+      console.warn('⚠️ [TransactionService] Empty response received');
+      return [];
+    }
+
+    // Handle different possible response structures
+    let transactions = [];
+    
+    // Case 1: Response has data property (common API pattern)
+    if (response.data !== undefined) {
+      transactions = Array.isArray(response.data) ? response.data : [response.data];
+    } 
+    // Case 2: Response has transactions array
+    else if (response.transactions) {
+      transactions = Array.isArray(response.transactions) ? response.transactions : [response.transactions];
+    }
+    // Case 3: Response is already an array
+    else if (Array.isArray(response)) {
+      transactions = response;
+    }
+    // Case 4: Response is a single transaction object
+    else if (typeof response === 'object' && response !== null) {
+      transactions = [response];
     }
     
-    // If we get here, the response format is unexpected
-    console.error('[TransactionService] Unexpected response format:', response);
-    return [];
+    console.log(`✅ [TransactionService] Successfully processed ${transactions.length} transactions`);
+    return transactions || [];
   } catch (error) {
-    console.error('[TransactionService] Error fetching transactions:', {
+    const errorDetails = {
       message: error.message,
       status: error.status || error.response?.status,
       data: error.response?.data,
       stack: error.stack
-    });
+    };
     
-    // Re-throw with more context if needed
-    throw new Error(error.message || 'Failed to fetch transactions');
+    console.error('❌ [TransactionService] Error fetching transactions:', errorDetails);
+    
+    // Re-throw with more context
+    const errorMessage = error.response?.data?.message || 
+                        error.message || 
+                        'Failed to fetch transactions. Please try again later.';
+    
+    const enhancedError = new Error(errorMessage);
+    enhancedError.details = errorDetails;
+    throw enhancedError;
   }
 };
 
 /**
  * Adds a new transaction.
  * @param {object} transactionData - The data for the new transaction.
+ * @returns {Promise<Object>} The created transaction
  */
-export const addTransaction = async (transactionData) => {
+export const createTransaction = async (transactionData) => {
   console.log('[TransactionService] Adding transaction:', transactionData);
   
   // Check for token first
@@ -92,28 +107,64 @@ export const addTransaction = async (transactionData) => {
 };
 
 /**
- * Deletes a transaction by its ID.
- * @param {string} id - The ID of the transaction to delete.
+ * Updates an existing transaction
+ * @param {string} id - Transaction ID to update
+ * @param {Object} updates - Fields to update
+ * @returns {Promise<Object>} Updated transaction object
  */
-export const deleteTransaction = async (id) => {
+export const updateTransaction = async (id, updates) => {
   try {
-    console.log(`Deleting transaction with ID: ${id}`);
-    const response = await transactionAPI.delete(id);
-    console.log('Transaction deleted successfully:', response.data);
-    return response.data;
+    // If amount is being updated, ensure it's a number
+    if (updates.amount) {
+      updates.amount = parseFloat(updates.amount);
+    }
+    
+    const response = await api.put(`/api/transactions/${id}`, updates);
+    return response.data?.data || null;
   } catch (error) {
-    console.error('Error in deleteTransaction:', {
-      message: error.message,
-      response: error.response?.data,
-      status: error.response?.status,
-      transactionId: id
-    });
+    console.error(`Error updating transaction ${id}:`, error.response?.data || error.message);
     throw error;
   }
 };
 
+/**
+ * Deletes a transaction
+ * @param {string} id - Transaction ID to delete
+ * @returns {Promise<boolean>} True if successful
+ */
+export const deleteTransaction = async (id) => {
+  try {
+    await api.delete(`/api/transactions/${id}`);
+    return true;
+  } catch (error) {
+    console.error(`Error deleting transaction ${id}:`, error.response?.data || error.message);
+    throw error;
+  }
+};
+
+/**
+ * Gets transactions summary (totals by category, type, etc.)
+ * @returns {Promise<Object>} Summary object
+ */
+export const getTransactionsSummary = async () => {
+  try {
+    const response = await api.get('/api/transactions/summary');
+    return response.data?.data || {};
+  } catch (error) {
+    console.error('Error fetching transactions summary:', error.response?.data || error.message);
+    throw error;
+  }
+};
+
+// For backward compatibility
+export const addTransaction = createTransaction;
+
 export default {
   getTransactions,
-  addTransaction,
+  createTransaction,
+  updateTransaction,
   deleteTransaction,
+  getTransactionsSummary,
+  // Alias for backward compatibility
+  addTransaction,
 };

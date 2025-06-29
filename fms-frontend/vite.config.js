@@ -8,7 +8,13 @@ export default defineConfig({
     port: 5174,
     open: true,
     headers: {
-      'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' http://localhost:5001;"
+      'Content-Security-Policy': "default-src 'self'; " +
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+        "style-src 'self' 'unsafe-inline'; " +
+        "img-src 'self' data: blob:; " +
+        "font-src 'self' data:; " +
+        "media-src 'self' data: blob:; " +
+        "connect-src 'self' http://localhost:5001;"
     }
   },
   build: {
