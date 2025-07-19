@@ -1,7 +1,7 @@
 // src/pages/DashboardPage.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate, Outlet } from 'react-router-dom';
-import { Box, CircularProgress, Container } from '@mui/material';
+import { Box, CircularProgress, Container, Alert } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
 import Header from '../components/Header';
 import Sidebar from '../components/Dashboard/Sidebar';
@@ -46,9 +46,9 @@ const DashboardPage = () => {
             {alerts.length > 0 && (
               <Box sx={{ mb: 3 }}>
                 {alerts.map(alert => (
-                  <Box key={alert.id} sx={{ mb: 2 }}>
+                  <Alert key={alert.id} severity={alert.type} sx={{ mb: 2 }}>
                     {alert.message}
-                  </Box>
+                  </Alert>
                 ))}
               </Box>
             )}

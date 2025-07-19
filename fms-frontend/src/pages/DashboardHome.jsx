@@ -47,6 +47,7 @@ import {
   Legend,
   Filler
 } from 'chart.js';
+import PropTypes from 'prop-types';
 
 // Register ChartJS components
 ChartJS.register(
@@ -248,6 +249,17 @@ const MetricCard = ({ title, value, icon, color, trend, trendText, delay = 0 }) 
     </Card>
   </motion.div>
 );
+
+// Add PropTypes for MetricCard
+MetricCard.propTypes = {
+  title: PropTypes.string.isRequired,
+  value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+  icon: PropTypes.node,
+  color: PropTypes.string,
+  trend: PropTypes.number,
+  trendText: PropTypes.string,
+  delay: PropTypes.number,
+};
 
 // Helper function to generate chart data
 const generateChartData = (transactions) => {

@@ -1,7 +1,7 @@
 // src/pages/TransactionsPage.jsx
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Box, Container, Alert } from '@mui/material';
+import { Container } from '@mui/material';
 import TransactionList from '../components/Transactions/TransactionList';
 import AddTransaction from '../components/Transactions/AddTransaction';
 import { useAuth } from '../hooks/useAuth';
@@ -11,7 +11,7 @@ const TransactionsPage = () => {
 
   // Redirect to login if not authenticated
   if (!loading && !user) {
-    return <Navigate to="/login" />;
+    return <Navigate to="/auth/login" />;
   }
 
   return (

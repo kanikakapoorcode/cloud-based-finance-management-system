@@ -1,7 +1,7 @@
 // src/components/Transactions/AddTransaction.jsx
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AuthContext } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useSnackbar } from 'notistack';
 import { 
   Box,
@@ -32,17 +32,27 @@ import { formatCurrency } from '../../utils/formatCurrency';
 import { useTransactions } from '../../contexts/TransactionContext';
 import { categoryAPI } from '../../services/api';
 
-const AddTransaction = () => {
+// Define fallback categories outside the component
+const fallbackCategories = [
+  { _id: '1', name: 'Food & Dining', type: 'expense' },
+  { _id: '2', name: 'Shopping', type: 'expense' },
+  { _id: '3', name: 'Transportation', type: 'expense' },
+  { _id: '4', name: 'Bills & Utilities', type: 'expense' },
+  { _id: '5', name: 'Salary', type: 'income' },
+  { _id: '6', name: 'Freelance', type: 'income' },
+];
+
+const AddTransaction = ({ onTransactionAdded }) => { // Added prop
   const navigate = useNavigate();
   const { addTransaction } = useTransactions();
   const { 
     isAuthenticated, 
     user, 
-    authLoading, 
-    authError,
+    loading: authLoading,
+    error: authError,
     logout,
     updateUser: refreshUser
-  } = useContext(AuthContext);
+  } = useAuth();
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isIncome, setIsIncome] = useState(false);
@@ -50,496 +60,122 @@ const AddTransaction = () => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [categoriesError, setCategoriesError] = useState(false);
-  const [initialLoad, setInitialLoad] = useState(true);
-  const [formData, setFormData] = useState(() => {
-    // Initialize with default values including a valid date
-    return {
-      description: '',
-      amount: '',
-      date: new Date().toISOString().split('T')[0],
-      category: '', // Will be set after categories are loaded
-    };
-  });
-  
-  // Track if we've set the initial category
-  const [hasSetInitialCategory, setHasSetInitialCategory] = useState(false);
+  const [formData, setFormData] = useState(() => ({
+    description: '',
+    amount: '',
+    date: new Date().toISOString().split('T')[0],
+    category: '',
+  }));
 
   const { enqueueSnackbar } = useSnackbar();
   
-  // Debug auth state
-  console.log('=== AUTH STATE IN ADD TRANSACTION ===');
-  console.log('isAuthenticated:', isAuthenticated);
-  console.log('User:', user);
-  console.log('Auth Loading:', authLoading);
-  console.log('Auth Error:', authError);
-  
-  // Debug token storage and auth state
-  useEffect(() => {
-    console.log('=== AUTH DEBUG ===');
-    const token = localStorage.getItem('fms_token');
-    const user = JSON.parse(localStorage.getItem('fms_user') || '{}');
-    
-    console.log('fms_token exists:', !!token);
-    console.log('fms_token length:', token?.length || 0);
-    console.log('fms_user exists:', !!user);
-    console.log('User ID:', user?._id);
-    console.log('Is authenticated:', isAuthenticated);
-    console.log('Auth loading:', authLoading);
-    console.log('==================');
-    
-    if (isAuthenticated && !token) {
-      console.warn('User is authenticated but no token found in localStorage!');
-    }
-  }, [isAuthenticated, authLoading]);
-
-  // Debug token storage
-  useEffect(() => {
-    console.log('=== TOKEN DEBUG ===');
-    console.log('All localStorage keys:', Object.keys(localStorage));
-    console.log('fms_token exists:', !!localStorage.getItem('fms_token'));
-    console.log('Auth header:', localStorage.getItem('fms_token') ? `Bearer ${localStorage.getItem('fms_token')}` : 'No token');
-    console.log('==================');
-  }, []);
-
-  // Function to validate and refresh token if needed
-  const validateAndRefreshToken = async () => {
-    try {
-      const token = localStorage.getItem('fms_token');
-      const user = JSON.parse(localStorage.getItem('fms_user') || '{}');
-      
-      console.log('Current token:', token ? 'Present' : 'Missing');
-      console.log('User in storage:', user);
-      
-      if (!token && !user?.token) {
-        throw new Error('No authentication token found');
-      }
-      
-      // If we have a token, verify it's still valid
-      if (token) {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        const isExpired = payload.exp * 1000 < Date.now();
-        
-        if (isExpired) {
-          console.log('Token expired, attempting refresh...');
-          // Try to refresh the token
-          const refreshToken = user?.refreshToken;
-          if (!refreshToken) {
-            throw new Error('No refresh token available');
-          }
-          
-          const response = await authAPI.refreshToken({ refreshToken });
-          if (response?.data?.token) {
-            console.log('Token refreshed successfully');
-            localStorage.setItem('fms_token', response.data.token);
-            localStorage.setItem('fms_user', JSON.stringify({
-              ...user,
-              token: response.data.token
-            }));
-            return response.data.token;
-          }
-          throw new Error('Failed to refresh token');
-        }
-        return token;
-      }
-      
-      // If no token but user object has one, use that
-      if (user?.token) {
-        localStorage.setItem('fms_token', user.token);
-        return user.token;
-      }
-      
-      throw new Error('No valid authentication found');
-    } catch (error) {
-      console.error('Token validation failed:', error);
-      // Clear invalid auth data
-      localStorage.removeItem('fms_token');
-      localStorage.removeItem('fms_user');
-      throw error;
-    }
-  };
-
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      console.log('User not authenticated, redirecting to login');
-      enqueueSnackbar('Please log in to continue', { variant: 'error' });
-      navigate('/auth/login', { 
-        state: { from: window.location.pathname },
-        replace: true 
-      });
-    }
-  }, [isAuthenticated, authLoading, navigate, enqueueSnackbar]);
-
-  // Fetch categories on component mount
+  // Simplify category fetching
   useEffect(() => {
     const fetchCategories = async () => {
+      if (!isAuthenticated || authLoading) return;
+      setLoading(true);
+      setCategoriesError(false);
       try {
-        // Check if we have valid auth state
-        if (!isAuthenticated || authLoading) {
-          console.log('Not authenticated or still loading, skipping category fetch');
-          return;
-        }
-
-        // Get categories from API
-        setLoading(true);
-        setCategoriesError(false);
-
-        try {
-          const response = await categoryAPI.getAll();
-          console.log('Categories API response:', response);
-
-          if (response && response.data) {
-            console.log('Categories received:', response.data);
-            setCategories(response.data);
-          } else {
-            console.log('No categories received from API, using fallback categories');
-            const fallbackCategories = [
-              { _id: '1', name: 'Food & Dining', type: 'expense' },
-              { _id: '2', name: 'Shopping', type: 'expense' },
-              { _id: '3', name: 'Transportation', type: 'expense' },
-              { _id: '4', name: 'Bills & Utilities', type: 'expense' },
-              { _id: '5', name: 'Salary', type: 'income' },
-              { _id: '6', name: 'Freelance', type: 'income' },
-            ];
-            setCategories(fallbackCategories);
-          }
-        } catch (error) {
-          console.error('Error fetching categories:', error);
-          
-          // Set fallback categories on any error
-          const fallbackCategories = [
-            { _id: '1', name: 'Food & Dining', type: 'expense' },
-            { _id: '2', name: 'Shopping', type: 'expense' },
-            { _id: '3', name: 'Transportation', type: 'expense' },
-            { _id: '4', name: 'Bills & Utilities', type: 'expense' },
-            { _id: '5', name: 'Salary', type: 'income' },
-            { _id: '6', name: 'Freelance', type: 'income' },
-          ];
-          setCategories(fallbackCategories);
-
-          enqueueSnackbar('Failed to load categories. Using fallback categories.', {
-            variant: 'error',
-            autoHideDuration: 5000
-          });
-        } finally {
-          setLoading(false);
-        }
+        const response = await categoryAPI.getAll();
+        setCategories(response?.data || fallbackCategories);
       } catch (error) {
-        console.error('Error in category fetch:', error);
+        console.error('Error fetching categories:', error);
         setCategoriesError(true);
-        enqueueSnackbar('An error occurred. Please try again.', {
-          variant: 'error',
-          autoHideDuration: 5000
-        });
+        setCategories(fallbackCategories);
+        enqueueSnackbar('Failed to load categories. Using fallback categories.', { variant: 'error' });
+      } finally {
+        setLoading(false);
       }
     };
-
     fetchCategories();
-  }, [isAuthenticated, authLoading, navigate, enqueueSnackbar]);
+  }, [isAuthenticated, authLoading, enqueueSnackbar]);
 
-  // Process and normalize categories when they are loaded
-  const processedCategories = React.useMemo(() => {
-    if (!Array.isArray(categories) || categories.length === 0) {
-      // Return default categories if none are loaded
-      return [
-        { _id: '1', name: 'Food & Dining', type: 'expense' },
-        { _id: '2', name: 'Shopping', type: 'expense' },
-        { _id: '3', name: 'Transportation', type: 'expense' },
-        { _id: '4', name: 'Bills & Utilities', type: 'expense' },
-        { _id: '5', name: 'Salary', type: 'income' },
-        { _id: '6', name: 'Freelance', type: 'income' },
-      ];
-    }
-
-    return categories.map(cat => ({
+  // Process and normalize categories
+  const processedCategories = useMemo(() => {
+    return (Array.isArray(categories) && categories.length > 0 ? categories : fallbackCategories).map(cat => ({
       _id: String(cat._id || '').trim(),
       name: String(cat.name || 'Uncategorized').trim(),
       type: String(cat.type || 'expense').toLowerCase().trim(),
     }));
   }, [categories]);
-  
-  // Track if we're ready to render the Select component
-  const [isSelectReady, setIsSelectReady] = useState(false);
 
   // Filter categories based on transaction type
-  const filteredCategories = React.useMemo(() => {
-    console.log('Filtering categories. isIncome:', isIncome);
-    if (!Array.isArray(processedCategories)) {
-      console.log('No processed categories available');
-      return [];
-    }
-    
+  const filteredCategories = useMemo(() => {
     const targetType = isIncome ? 'income' : 'expense';
-    const filtered = processedCategories.filter(cat => {
-      if (!cat) return false;
-      const catType = String(cat.type || '').toLowerCase().trim();
-      const matches = catType === targetType || catType === 'both';
-      console.log(`Category ${cat._id} (${cat.name}) type: ${catType}, matches: ${matches}`);
-      return matches;
-    });
-    
-    console.log('Filtered categories:', filtered);
-    return filtered;
+    return processedCategories.filter(cat => cat.type === targetType || cat.type === 'both');
   }, [processedCategories, isIncome]);
 
-  // Set default category when filtered categories change
+  // Update category when filtered categories change
   useEffect(() => {
-    console.log('=== Category Selection Debug ===');
-    console.log('Current form category:', formData.category);
-    console.log('Has set initial category:', hasSetInitialCategory);
-    console.log('Filtered categories count:', filteredCategories.length);
-    
-    // Mark Select as not ready while we're updating
-    setIsSelectReady(false);
-    
-    if (filteredCategories.length > 0) {
-      console.log('First filtered category:', filteredCategories[0]);
-      
-      // Only set the initial category once when categories are first loaded
-      if (!hasSetInitialCategory) {
-        const newCategory = String(filteredCategories[0]?._id || '');
-        console.log('Setting initial category:', newCategory);
-        setFormData(prev => ({
-          ...prev,
-          category: newCategory
-        }));
-        setHasSetInitialCategory(true);
-      } else {
-        // If we already set an initial category, validate the current one
-        const currentCategory = String(formData.category || '');
-        const categoryExists = filteredCategories.some(
-          cat => String(cat._id) === currentCategory
-        );
-        
-        console.log('Validating current category. Exists:', categoryExists);
-        
-        if (!categoryExists && filteredCategories[0]) {
-          const newCategory = String(filteredCategories[0]._id);
-          console.log('Setting new default category:', newCategory);
-          setFormData(prev => ({
-            ...prev,
-            category: newCategory
-          }));
-        }
-      }
-    } else if (formData.category) {
-      // If no categories available but we have a category selected, clear it
-      console.log('No categories available, clearing selection');
-      setFormData(prev => ({
-        ...prev,
-        category: ''
-      }));
+    if (filteredCategories.length > 0 && !formData.category) {
+      setFormData(prev => ({ ...prev, category: filteredCategories[0]._id }));
     }
-    
-    // Mark Select as ready after state updates
-    const timer = setTimeout(() => {
-      setIsSelectReady(true);
-      console.log('Select component is now ready');
-    }, 0);
-    
-    console.log('=== End Category Selection Debug ===');
-    
-    return () => clearTimeout(timer);
-  }, [filteredCategories, formData.category, hasSetInitialCategory]);
-  
-  // Show loading state while checking auth
-  if (authLoading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
-        <CircularProgress />
-        <Box ml={2}>Loading...</Box>
-      </Box>
-    );
-  }
-  
-  // Generate unique IDs for form fields
-  const inputIds = {
-    description: 'transaction-description',
-    amount: 'transaction-amount',
-    date: 'transaction-date',
-    category: 'transaction-category',
-    type: 'transaction-type'
-  };
-  
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-
-  // Log categories when they change
-  useEffect(() => {
-    console.log('All categories updated:', categories);
-    console.log('Current form data:', formData);
-    console.log('API URL:', `${import.meta.env.VITE_API_URL}/categories`);
-  }, [categories, formData]);
-
-
-  
-  // Debug log for categories and form data
-  useEffect(() => {
-    console.log('=== CATEGORY DEBUG ===');
-    console.log('All categories (count):', categories?.length || 0);
-    console.log('Form data:', formData);
-    console.log('Is Income:', isIncome);
-    console.log('Filtered categories (count):', filteredCategories?.length || 0);
-    console.log('Loading state:', loading);
-    
-    // Log the first few categories if they exist
-    if (categories?.length > 0) {
-      console.log('First 3 categories:', categories.slice(0, 3));
-    }
-    
-    if (filteredCategories?.length > 0) {
-      console.log('First 3 filtered categories:', filteredCategories.slice(0, 3));
-    }
-    
-    console.log('======================');
-  }, [categories, formData, isIncome, filteredCategories, loading]);
-  
-  // Set default category when filtered categories change
-  useEffect(() => {
-    if (filteredCategories.length > 0) {
-      const currentCategoryValid = filteredCategories.some(
-        cat => cat._id === formData.category
-      );
-      
-      if (!currentCategoryValid && formData.category) {
-        // Current category is no longer valid, clear it
-        setFormData(prev => ({ ...prev, category: '' }));
-      } else if (!currentCategoryValid) {
-        // Set default category if none is selected
-        const defaultCategory = filteredCategories[0]?._id || '';
-        if (defaultCategory) {
-          setFormData(prev => ({
-            ...prev,
-            category: defaultCategory
-          }));
-        }
-      }
-    } else if (formData.category) {
-      // No categories available, clear selection
-      setFormData(prev => ({ ...prev, category: '' }));
-    }
-  }, [filteredCategories, formData.category]);
+  }, [filteredCategories, setFormData]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value
-    });
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleIncomeToggle = () => {
-    const newIsIncome = !isIncome;
-    setIsIncome(newIsIncome);
-    
-    // Reset form data but keep the amount and description
+    setIsIncome(prev => !prev);
     setFormData(prev => ({
       ...prev,
-      category: '' // This will trigger the default category selection
+      category: filteredCategories[0]?._id || '', // Reset category
     }));
-    
-    // Reset the initial category flag to force reselection
-    setHasSetInitialCategory(false);
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
-    
-    if (isSubmitting) return;
-    
-    // Enhanced validation
+
     if (!formData.description?.trim()) {
       setError('Please enter a description.');
       return;
     }
-    
+
     const amount = parseFloat(formData.amount);
     if (isNaN(amount) || amount <= 0) {
       setError('Please enter a valid, positive amount.');
       return;
     }
-    
+
     if (!formData.category) {
       setError('Please select a category.');
       return;
     }
-    
-    // Find the selected category to ensure it exists
-    const selectedCategory = categories.find(cat => cat._id === formData.category);
-    if (!selectedCategory) {
-      setError('Please select a valid category.');
-      return;
-    }
-    
-    // Validate category type matches transaction type
-    if ((isIncome && selectedCategory.type === 'expense') || 
-        (!isIncome && selectedCategory.type === 'income')) {
-      setError(`Selected category is for ${selectedCategory.type}s, but you're adding ${isIncome ? 'income' : 'an expense'}.`);
-      return;
-    }
-    
-    // Show confirmation dialog
+
     setShowConfirmDialog(true);
   };
-  
+
   const handleConfirmSubmit = async () => {
     if (isSubmitting) return;
-    
-    const token = localStorage.getItem('fms_token') || 
-                   JSON.parse(localStorage.getItem('fms_user') || '{}')?.token;
-                   
-    if (!token) {
-      const errorMsg = 'No active session found. Please log in again.';
-      setError(errorMsg);
-      enqueueSnackbar(errorMsg, { 
-        variant: 'error',
-        autoHideDuration: 3000,
-        anchorOrigin: { vertical: 'top', horizontal: 'center' }
-      });
-      // Clear any existing auth data
-      localStorage.removeItem('fms_user');
-      localStorage.removeItem('fms_token');
-      // Redirect to login after a short delay
-      setTimeout(() => navigate('/auth/login'), 1500);
-      return;
-    }
-    
+
+    setIsSubmitting(true);
+    setError('');
+    setSuccess('');
+    setShowConfirmDialog(false);
+
     try {
-      setIsSubmitting(true);
-      setError('');
-      setSuccess('');
-      setShowConfirmDialog(false);
-      
-      // Validate category
-      const selectedCategory = categories.find(cat => cat._id === formData.category);
+      const selectedCategory = processedCategories.find(cat => cat._id === formData.category);
       if (!selectedCategory) {
         throw new Error('Selected category not found. Please try again.');
       }
-      
-      // Prepare transaction data
-      const amount = parseFloat(formData.amount);
-      if (isNaN(amount) || amount <= 0) {
-        throw new Error('Please enter a valid amount greater than 0');
-      }
-      
+
       const transactionData = {
         description: formData.description.trim(),
-        amount: amount.toFixed(2),
+        amount: parseFloat(formData.amount).toFixed(2),
         date: formData.date,
         category: selectedCategory._id,
         type: isIncome ? 'income' : 'expense',
         notes: ''
       };
-      
-      console.log('Submitting transaction:', transactionData);
-      
-      // Call the API to add transaction
+
       const response = await addTransaction(transactionData);
-      
+
       if (response && (response.success || response._id)) {
-        const successMessage = `Successfully added ${isIncome ? 'income' : 'expense'} of ₹${amount.toFixed(2)}`;
+        const successMessage = `Successfully added ${isIncome ? 'income' : 'expense'} of ${formatCurrency(parseFloat(formData.amount))}`;
         setSuccess(successMessage);
         enqueueSnackbar(successMessage, { 
           variant: 'success', 
@@ -590,6 +226,370 @@ const AddTransaction = () => {
         // Request was made but no response received
         errorMessage = 'No response from server. Please check your connection.';
       } else if (err.isAuthError) {
+        // Authentication error
+        errorMessage = 'Your session has expired. Please log in again.';
+        localStorage.removeItem('fms_user');
+        localStorage.removeItem('fms_token');
+        setTimeout(() => navigate('/auth/login'), 1000);
+      } else {
+        // Other errors
+        errorMessage = err.message || errorMessage;
+      }
+      
+      setError(errorMessage);
+      enqueueSnackbar(errorMessage, { 
+        variant: 'error',
+        autoHideDuration: 5000,
+        anchorOrigin: { vertical: 'top', horizontal: 'center' }
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Box>
+      <Paper elevation={3} sx={{ p: 3, borderRadius: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Typography variant="h5" fontWeight="bold" component="h1">
+            Add {isIncome ? "Income" : "Expense"}
+          </Typography>
+          <Button 
+            variant="outlined" 
+            startIcon={<ArrowBack />} 
+            onClick={() => navigate('/dashboard/transactions')}
+          >
+            Back to Transactions
+          </Button>
+        </Box>
+        
+        <Divider sx={{ mb: 3 }} />
+        
+        {error && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            {error}
+          </Alert>
+        )}
+        
+        {success && (
+          <Alert severity="success" sx={{ mb: 3 }}>
+            {success}
+          </Alert>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <Grid container spacing={3}>
+            <Grid item xs={12}>
+              <FormControlLabel
+                control={
+                  <Switch 
+                    id={inputIds.type}
+                    checked={isIncome}
+                    onChange={handleIncomeToggle}
+                    color="success"
+                    inputProps={{
+                      'aria-label': `Transaction type: ${isIncome ? 'Income' : 'Expense'}`,
+                    }}
+                  />
+                }
+                label={`Add as ${isIncome ? "Income" : "Expense"}`}
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                id={inputIds.description}
+                label="Description"
+                name="description"
+                value={formData.description}
+                onChange={handleChange}
+                required
+                placeholder={isIncome ? "e.g., Salary, Freelance Work" : "e.g., Groceries, Rent"}
+                inputProps={{
+                  'aria-label': 'Transaction description',
+                }}
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                id={inputIds.amount}
+                label="Amount"
+                name="amount"
+                type="number"
+                value={formData.amount}
+                onChange={handleChange}
+                required
+                InputProps={{
+                  'aria-label': 'Transaction amount',
+                  startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                }}
+                placeholder="0.00"
+                helperText={formData.amount ? `${formatCurrency(isIncome ? parseFloat(formData.amount) : -parseFloat(formData.amount))}` : ''}
+              />
+            </Grid>
+            
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                id={inputIds.date}
+                label="Date"
+                name="date"
+                type="date"
+                value={formData.date}
+                onChange={handleChange}
+                InputLabelProps={{
+                  shrink: true,
+                }}
+                inputProps={{
+                  'aria-label': 'Transaction date',
+                }}
+              />
+            </Grid>
+            
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel id="category-select-label">Category</InputLabel>
+                {loading ? (
+                  <Box sx={{ p: 2, textAlign: 'center' }}>
+                    <CircularProgress size={24} />
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                      Loading categories...
+                    </Typography>
+                  </Box>
+                ) : (
+                  <>
+                    <Select
+                      labelId="category-select-label"
+                      id={inputIds.category}
+                      name="category"
+                      value={formData.category || ''}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setFormData(prev => ({
+                          ...prev,
+                          category: value
+                        }));
+                      }}
+                      disabled={filteredCategories.length === 0}
+                      displayEmpty
+                      renderValue={(selected) => {
+                        if (!selected) return <em>Select a category</em>;
+                        const selectedCategory = filteredCategories.find(cat => String(cat._id) === String(selected));
+                        return selectedCategory ? selectedCategory.name : <em>Invalid selection</em>;
+                      }}
+                      inputProps={{ 
+                        'aria-label': 'Transaction category',
+                        'data-testid': 'category-select'
+                      }}
+                    >
+                      {filteredCategories.length === 0 ? (
+                        <MenuItem value="" disabled>
+                          <em>No {isIncome ? 'income' : 'expense'} categories found</em>
+                        </MenuItem>
+                      ) : (
+                        <>
+                          <MenuItem value="">
+                            <em>Select a category</em>
+                          </MenuItem>
+                          {filteredCategories.map((category) => (
+                            <MenuItem 
+                              key={category._id} 
+                              value={category._id}
+                              data-testid={`category-option-${category._id}`}
+                            >
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <span>{category.name}</span>
+                                <Chip 
+                                  label={category.type} 
+                                  size="small" 
+                                  color={category.type === 'income' ? 'success' : 'error'}
+                                />
+                              </Box>
+                            </MenuItem>
+                          ))}
+                        </>
+                      )}
+                    </Select>
+                    
+                    {filteredCategories.length === 0 ? (
+                      <Box sx={{ mt: 1 }}>
+                        <FormHelperText error>
+                          No {isIncome ? 'income' : 'expense'} categories found.
+                        </FormHelperText>
+                        <Button 
+                          variant="text" 
+                          size="small" 
+                          sx={{ 
+                            mt: 1, 
+                            ml: 0.5, 
+                            textTransform: 'none', 
+                            color: 'primary.main',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 0.5
+                          }}
+                          onClick={() => navigate('/dashboard/categories')}
+                          startIcon={<span>➕</span>}
+                        >
+                          Add Categories
+                        </Button>
+                      </Box>
+                    ) : (
+                      <FormHelperText>
+                        Select a category for this {isIncome ? 'income' : 'expense'}
+                      </FormHelperText>
+                    )}
+                  </>
+                )}
+              </FormControl>
+            </Grid>
+            
+            <Grid item xs={12}>
+              <Divider sx={{ my: 2 }} />
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 2 }}>
+                <Button
+                  variant="outlined"
+                  onClick={() => navigate('/dashboard/transactions')}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  color={isIncome ? "success" : "primary"}
+                  disabled={isSubmitting}
+                  startIcon={isSubmitting ? <CircularProgress size={20} color="inherit" /> : null}
+                >
+                  {isSubmitting ? 'Processing...' : `Add ${isIncome ? 'Income' : 'Expense'}`}
+                </Button>
+              </Box>
+            </Grid>
+          </Grid>
+        </form>
+      </Paper>
+      
+      {/* Confirmation Dialog */}
+      <Dialog 
+        open={showConfirmDialog} 
+        onClose={() => !isSubmitting && setShowConfirmDialog(false)}
+        aria-labelledby="confirm-dialog-title"
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle id="confirm-dialog-title" sx={{ pb: 1 }}>
+          <Box display="flex" alignItems="center" gap={1}>
+            {isIncome ? (
+              <span style={{ color: '#2e7d32' }}>💵</span>
+            ) : (
+              <span style={{ color: '#d32f2f' }}>💸</span>
+            )}
+            <span>Confirm {isIncome ? 'Income' : 'Expense'}</span>
+          </Box>
+        </DialogTitle>
+        
+        <DialogContent>
+          <Box mb={2}>
+            <Typography variant="body1" gutterBottom>
+              Are you sure you want to add this {isIncome ? 'income' : 'expense'} of 
+              <span style={{ 
+                color: isIncome ? '#2e7d32' : '#d32f2f',
+                fontWeight: 'bold',
+                margin: '0 4px'
+              }}>
+                ₹{parseFloat(formData.amount || 0).toFixed(2)}
+              </span>?
+            </Typography>
+          </Box>
+          
+          <Paper variant="outlined" sx={{ p: 2, borderRadius: 1, mb: 2 }}>
+            <Box display="flex" flexDirection="column" gap={1}>
+              <Box display="flex" justifyContent="space-between">
+                <Typography variant="body2" color="text.secondary">
+                  <strong>Category:</strong>
+                </Typography>
+                <Typography variant="body2">
+                  {categories.find(c => c._id === formData.category)?.name || 'N/A'}
+                </Typography>
+              </Box>
+              
+              <Box display="flex" justifyContent="space-between">
+                <Typography variant="body2" color="text.secondary">
+                  <strong>Date:</strong>
+                </Typography>
+                <Typography variant="body2">
+                  {formData.date ? new Date(formData.date).toLocaleDateString('en-IN', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric'
+                  }) : 'N/A'}
+                </Typography>
+              </Box>
+              
+              <Box display="flex" justifyContent="space-between">
+                <Typography variant="body2" color="text.secondary">
+                  <strong>Description:</strong>
+                </Typography>
+                <Typography variant="body2" sx={{ maxWidth: '60%', textAlign: 'right' }}>
+                  {formData.description || 'No description'}
+                </Typography>
+              </Box>
+            </Box>
+          </Paper>
+          
+          {error && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {error}
+            </Alert>
+          )}
+        </DialogContent>
+        
+        <DialogActions sx={{ px: 3, pb: 2, pt: 0 }}>
+          <Button 
+            onClick={() => setShowConfirmDialog(false)} 
+            disabled={isSubmitting}
+            variant="outlined"
+            color="inherit"
+            sx={{ minWidth: 100 }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleConfirmSubmit}
+            color={isIncome ? 'success' : 'primary'}
+            variant="contained"
+            disabled={isSubmitting}
+            startIcon={isSubmitting ? <CircularProgress size={20} color="inherit" /> : null}
+            sx={{ minWidth: 120 }}
+          >
+            {isSubmitting ? 'Processing...' : 'Confirm'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+};
+
+export default AddTransaction;
+  );
+};
+
+export default AddTransaction;
+};
+
+export default AddTransaction;
+          >
+            {isSubmitting ? 'Processing...' : 'Confirm'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+};
+
+export default AddTransaction;
         // Authentication error
         errorMessage = 'Your session has expired. Please log in again.';
         localStorage.removeItem('fms_user');

@@ -37,7 +37,8 @@ import {
   ListItemText,
   Collapse,
   Fade,
-  Zoom
+  Zoom,
+  Pagination // Import Pagination
 } from '@mui/material';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
@@ -928,34 +929,44 @@ const ReportGenerator = () => {
   
   // Render category breakdown chart
   const renderCategoryBreakdown = () => {
-    if (!reportData?.summary) return null;
-    setFilters(prev => ({
-      ...prev,
-      categories: prev.categories.includes(category)
-        ? prev.categories.filter(c => c !== category)
-        : [...prev.categories, category]
+    if (!reportData?.summary?.expensesByCategory && reportType === 'expenses') {
+      return <Typography>No expense categories to display.</Typography>;
+    }
+
+    if (!reportData?.summary?.incomeByCategory && reportType === 'income') {
+      return <Typography>No income categories to display.</Typography>;
+    }
+
+    const categoryData = reportType === 'expenses' ? reportData.summary.expensesByCategory : reportData.summary.incomeByCategory;
+
+    if (!categoryData) return null;
+
+    const data = Object.entries(categoryData).map(([category, value]) => ({
+      name: category,
+      value: Math.abs(value),
     }));
-  };
-  
-  // Toggle sort order
-  const toggleSortOrder = () => {
-    setFilters(prev => ({
-      ...prev,
-      sortOrder: prev.sortOrder === 'asc' ? 'desc' : 'asc'
-    }));
-  };
-  
-  // Reset all filters
-  const resetFilters = () => {
-    setFilters({
-      search: '',
-      categories: [],
-      minAmount: '',
-      maxAmount: '',
-      transactionType: 'all',
-      sortBy: 'date',
-      sortOrder: 'desc'
-    });
+
+    return (
+      <ResponsiveContainer width="100%" height={300}>
+        <PieChart>
+          <Pie
+            dataKey="value"
+            isAnimationActive={false}
+            data={data}
+            cx="50%"
+            cy="50%"
+            outerRadius={80}
+            fill="#8884d8"
+            label
+          >
+            {data.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={`#${Math.floor(Math.random() * 16777215).toString(16)}`} />
+            ))}
+          </Pie>
+          <RechartsTooltip content={<CustomTooltip />} />
+        </PieChart>
+      </ResponsiveContainer>
+    );
   };
 
   // Format date for display
@@ -1004,6 +1015,26 @@ const ReportGenerator = () => {
     children: PropTypes.node,
     index: PropTypes.number.isRequired,
     value: PropTypes.number.isRequired,
+  };
+
+  const renderSummaryCards = () => {
+    return null;
+  };
+
+  const renderQuickStats = () => {
+    return null;
+  };
+
+  const renderMainChart = () => {
+    return null;
+  };
+
+  const renderSecondaryChart = () => {
+    return null;
+  };
+
+  const renderDataTable = () => {
+    return null;
   };
 
   return (

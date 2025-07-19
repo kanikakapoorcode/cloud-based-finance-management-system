@@ -2,6 +2,7 @@ import { Box, Container, Typography, useTheme, useMediaQuery } from '@mui/materi
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+import PropTypes from 'prop-types';
 
 const AuthLayout = ({ children, title, subtitle }) => {
   const theme = useTheme();
@@ -325,6 +326,13 @@ const AuthLayout = ({ children, title, subtitle }) => {
       </Box>
     </Box>
   );
+};
+
+// Add PropTypes for interface enforcement
+AuthLayout.propTypes = {
+  children: PropTypes.node.isRequired,
+  title: PropTypes.string.isRequired,
+  subtitle: PropTypes.string,
 };
 
 export default AuthLayout;

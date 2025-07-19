@@ -11,7 +11,7 @@ const ProfilePage = () => {
   const [user, setUser] = useState(null);
   
   const { register: registerProfile, handleSubmit: handleProfileSubmit, reset: resetProfile } = useForm();
-  const { register: registerPassword, handleSubmit: handlePasswordSubmit, reset: resetPassword } = useForm();
+  const { register: registerPassword, handleSubmit: handlePasswordSubmit, reset: resetPassword, watch } = useForm();
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -192,9 +192,8 @@ const ProfilePage = () => {
               <input
                 type="password"
                 {...registerPassword('confirmPassword', {
-                  validate: value => 
-                    value === document.querySelector('input[name="newPassword"]').value || 
-                    'Passwords do not match'
+                  validate: value =>
+                    value === watch('newPassword') || 'Passwords do not match'
                 })}
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               />
@@ -213,5 +212,4 @@ const ProfilePage = () => {
     </div>
   );
 };
-
 export default ProfilePage;

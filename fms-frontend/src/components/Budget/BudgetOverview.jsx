@@ -342,7 +342,7 @@ export default function BudgetOverview() {
               </Typography>
             </Box>
             <Divider sx={{ mb: 2 }} />
-            {budgetData.categories
+            {categories
               .filter(cat => cat.spent > 0)
               .sort((a, b) => b.spent - a.spent)
               .slice(0, 5)
